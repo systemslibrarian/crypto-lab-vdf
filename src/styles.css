@@ -275,6 +275,15 @@ details.trapdoor[open] { padding-bottom: 1.1rem; }
   font-style: italic;
 }
 
+.scripture-footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  margin-top: 2rem;
+}
+
 @media (max-width: 640px) {
   #app { padding: 1.25rem 0.9rem 2.5rem; }
   .lede h1 { font-size: 1.6rem; }
