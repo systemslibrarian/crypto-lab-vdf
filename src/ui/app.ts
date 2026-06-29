@@ -130,16 +130,27 @@ function whatIsPanel(): HTMLElement {
 function evaluatePanel(): HTMLElement {
   const p = panel('2', 'Evaluate the VDF', 'Choose an input and a difficulty T (sequential steps), then run it. Watch the work accrue one squaring at a time.');
 
-  const input = el('input', { type: 'text', id: 'vdf-input', value: '42', inputmode: 'numeric', autocomplete: 'off' });
+  const input = el('input', {
+    type: 'text', id: 'vdf-input', value: '42', inputmode: 'numeric',
+    autocomplete: 'off', 'aria-describedby': 'vdf-input-err',
+  });
+  const inputErr = el('span', { id: 'vdf-input-err', class: 'field-err', role: 'alert', hidden: true });
   const tExp = el('input', { type: 'range', id: 'vdf-t', min: '4', max: '14', value: '11', step: '1' });
   const tVal = el('span', { class: 'slider-val' }, []);
-  const setTLabel = () => { tVal.textContent = `T = 2^${tExp.value} = ${(2 ** Number(tExp.value)).toLocaleString()} steps`; };
+  const setTLabel = () => {
+    const steps = (2 ** Number(tExp.value)).toLocaleString();
+    tVal.textContent = `T = 2^${tExp.value} = ${steps} steps`;
+    tExp.setAttribute('aria-valuetext', `2 to the ${tExp.value}, ${steps} sequential steps`);
+  };
   tExp.addEventListener('input', setTLabel);
   setTLabel();
 
   const bar = el('span', {});
-  const progress = el('div', { class: 'progress', role: 'progressbar', 'aria-label': 'evaluation progress' }, [bar]);
-  const counter = el('div', { class: 'counter' }, ['Idle — press Evaluate.']);
+  const progress = el('div', {
+    class: 'progress', role: 'progressbar', 'aria-label': 'evaluation progress',
+    'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': 0,
+  }, [bar]);
+  const counter = el('div', { class: 'counter', role: 'status', 'aria-live': 'polite' }, ['Idle — press Evaluate.']);
   const output = el('div', { id: 'eval-output' });
 
   const evalBtn = el('button', { type: 'button', id: 'eval-btn' }, ['Evaluate']);
@@ -147,8 +158,18 @@ function evaluatePanel(): HTMLElement {
 
   evalBtn.addEventListener('click', () => {
     let inputBig: bigint;
-    try { inputBig = BigInt((input.value || '0').trim()); }
-    catch { counter.innerHTML = '<span style="color:var(--alarm)">⚠ Enter a whole number.</span>'; return; }
+    try {
+      inputBig = BigInt((input.value || '0').trim());
+      input.removeAttribute('aria-invalid');
+      inputErr.hidden = true;
+      inputErr.textContent = '';
+    } catch {
+      input.setAttribute('aria-invalid', 'true');
+      inputErr.hidden = false;
+      inputErr.textContent = '⚠ Enter a whole number.';
+      input.focus();
+      return;
+    }
 
     const t = asSteps(2 ** Number(tExp.value));
     evalBtn.setAttribute('disabled', '');
@@ -161,12 +182,15 @@ function evaluatePanel(): HTMLElement {
       const next = gen.next();
       if (!next.done) {
         const { done, total } = next.value;
-        bar.style.width = `${(done / total) * 100}%`;
+        const pct = (done / total) * 100;
+        bar.style.width = `${pct}%`;
+        progress.setAttribute('aria-valuenow', String(Math.round(pct)));
         counter.innerHTML = `Squaring <b>${done.toLocaleString()}</b> / ${total.toLocaleString()} — each step needs the previous one.`;
         requestAnimationFrame(tick);
         return;
       }
       bar.style.width = '100%';
+      progress.setAttribute('aria-valuenow', '100');
       const res = next.value;
       counter.innerHTML = `Done — <b>${res.t.toLocaleString()}</b> sequential squarings.`;
       void finalizeEval(res, output, evalBtn, verifyEnable);
@@ -176,7 +200,7 @@ function evaluatePanel(): HTMLElement {
 
   p.append(
     el('div', { class: 'row' }, [
-      el('div', { class: 'field' }, [el('label', { for: 'vdf-input' }, ['Input x']), input]),
+      el('div', { class: 'field' }, [el('label', { for: 'vdf-input' }, ['Input x']), input, inputErr]),
       el('div', { class: 'field' }, [el('label', { for: 'vdf-t' }, ['Difficulty']), tExp, tVal]),
       el('div', {}, [evalBtn]),
     ]),
@@ -240,7 +264,7 @@ function workersControl(): HTMLElement {
 function verifyPanel(): HTMLElement {
   const p = panel('3', 'Verify — fast', 'The verifier re-derives the challenge ℓ from (N, x, y, T) and checks one identity. It never re-runs the T squarings, and it trusts nothing it was handed.');
 
-  const result = el('div', { id: 'verify-result' });
+  const result = el('div', { id: 'verify-result', role: 'status', 'aria-live': 'polite' });
   const verifyBtn = el('button', { type: 'button', id: 'verify-btn', disabled: true }, ['Verify']);
   const tamperY = el('button', { type: 'button', class: 'danger' }, ['Tamper with y']);
   const tamperPi = el('button', { type: 'button', class: 'danger' }, ['Tamper with π']);

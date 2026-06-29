@@ -96,6 +96,9 @@ body {
 
 label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
 
+.field-err { display: block; margin-top: 0.35rem; font-size: 0.85rem; color: var(--alarm); }
+input[aria-invalid="true"] { border-color: var(--alarm); }
+
 .row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
 .field { flex: 1 1 180px; }
 
