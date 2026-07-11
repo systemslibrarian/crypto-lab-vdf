@@ -1,6 +1,13 @@
 :root {
   /* Brand accent — the header (added later by the standardization pass) tints from this. */
   --accent: #a78bfa;
+  /* Text-on-background ink for the accent/status hues. The bright hues above stay
+     for borders, focus rings and swatches; these tokens carry any hue used as
+     small text so it clears WCAG 4.5:1 in each theme. Dark theme: the bright hues
+     already pass on the dark canvas, so the ink tokens mirror them. */
+  --accent-text: var(--accent);
+  --ok-text: var(--ok);
+  --warn-text: var(--warn);
 
   /* Dark palette (default). Light overrides below swap only these. */
   --bg: #0f1117;
@@ -20,9 +27,13 @@
 
   --radius: 12px;
   --mono-font: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
+
+  color-scheme: dark;
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --bg: #f6f7fb;
   --bg-panel: #ffffff;
   --bg-inset: #eef1f7;
@@ -37,13 +48,22 @@
   --alarm-bg: rgba(216, 58, 58, 0.08);
   --warn: #b7791f;
   --warn-bg: rgba(183, 121, 31, 0.1);
+
+  /* Small text needs darker inks than the swatch/border hues on light bg. */
+  --accent-text: #6d28d9; /* 7.1:1 on white, 6.3:1 on inset */
+  --ok-text: #047857;     /* 5.5:1 on white, 4.6:1 on ok-bg */
+  --warn-text: #8a5a00;   /* 5:1 on warn-bg pill */
 }
 
 * { box-sizing: border-box; }
 
+/* WebKit promotes body's background to the canvas only if html has one of its
+   own; without this axe sees a transparent page and mis-flags dark-theme text. */
+html { background-color: var(--bg); }
+
 body {
   margin: 0;
-  background: var(--bg);
+  background-color: var(--bg);
   color: var(--text);
   font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -68,8 +88,8 @@ body {
 .lede .toy-note {
   display: inline-block;
   font-size: 0.8rem;
-  color: var(--warn);
-  background: var(--warn-bg);
+  color: var(--warn-text);
+  background-color: var(--warn-bg);
   border: 1px solid var(--warn);
   border-radius: 999px;
   padding: 0.15rem 0.7rem;
@@ -77,7 +97,7 @@ body {
 }
 
 .panel {
-  background: var(--bg-panel);
+  background-color: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem 1.25rem 1.4rem;
@@ -88,7 +108,7 @@ body {
   font-size: 1.2rem;
 }
 .panel > h2 .num {
-  color: var(--accent);
+  color: var(--accent-text);
   font-variant-numeric: tabular-nums;
   margin-right: 0.4rem;
 }
@@ -104,7 +124,7 @@ input[aria-invalid="true"] { border-color: var(--alarm); }
 
 input[type="text"], input[type="number"] {
   width: 100%;
-  background: var(--bg-inset);
+  background-color: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
@@ -115,7 +135,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .slider-val {
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -124,7 +144,7 @@ button {
   font-weight: 600;
   border-radius: 8px;
   border: 1px solid var(--accent);
-  background: var(--accent);
+  background-color: var(--accent);
   color: #15121f;
   padding: 0.55rem 1.1rem;
   cursor: pointer;
@@ -139,7 +159,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
 
 .progress {
   height: 14px;
-  background: var(--bg-inset);
+  background-color: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 999px;
   overflow: hidden;
@@ -149,7 +169,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
   display: block;
   height: 100%;
   width: 0;
-  background: var(--accent);
+  background-color: var(--accent);
   transition: width 0.05s linear;
 }
 .counter {
@@ -162,7 +182,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
 
 .mono-box {
   position: relative;
-  background: var(--bg-inset);
+  background-color: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 2.6rem 0.6rem 0.7rem;
@@ -186,7 +206,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
   right: 5px;
   padding: 0.15rem 0.5rem;
   font-size: 0.72rem;
-  background: var(--bg-panel);
+  background-color: var(--bg-panel);
   color: var(--text-muted);
   border: 1px solid var(--border);
 }
@@ -202,9 +222,9 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
   border: 1px solid var(--border);
 }
 .status .ico { font-size: 1.2rem; line-height: 1; }
-.status.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
-.status.alarm { color: var(--alarm); background: var(--alarm-bg); border-color: var(--alarm); }
-.status.warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+.status.ok { color: var(--ok-text); background-color: var(--ok-bg); border-color: var(--ok); }
+.status.alarm { color: var(--alarm); background-color: var(--alarm-bg); border-color: var(--alarm); }
+.status.warn { color: var(--warn-text); background-color: var(--warn-bg); border-color: var(--warn); }
 .status small { display: block; font-weight: 400; color: var(--text-muted); }
 
 .opcontrast {
@@ -215,7 +235,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
 }
 .opcontrast .cell {
   flex: 1 1 160px;
-  background: var(--bg-inset);
+  background-color: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.7rem 0.9rem;
@@ -225,8 +245,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.opcontrast .cell.evalc .big { color: var(--accent); }
-.opcontrast .cell.verifyc .big { color: var(--ok); }
+.opcontrast .cell.evalc .big { color: var(--accent-text); }
+.opcontrast .cell.verifyc .big { color: var(--ok-text); }
 .opcontrast .cell .cap { font-size: 0.78rem; color: var(--text-muted); }
 
 table.cmp { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
@@ -238,7 +258,7 @@ table.cmp th, table.cmp td {
   font-size: 0.92rem;
 }
 table.cmp th { color: var(--text-muted); font-weight: 600; }
-table.cmp td .yes { color: var(--ok); font-weight: 600; }
+table.cmp td .yes { color: var(--ok-text); font-weight: 600; }
 table.cmp td .no { color: var(--alarm); font-weight: 600; }
 
 ul.apps, ul.constructions { margin: 0.4rem 0 0; padding-left: 1.1rem; }
@@ -253,7 +273,7 @@ details.trapdoor {
   padding: 0.6rem 1rem;
   margin: 1.25rem 0;
 }
-details.trapdoor summary { cursor: pointer; font-weight: 600; color: var(--warn); }
+details.trapdoor summary { cursor: pointer; font-weight: 600; color: var(--warn-text); }
 details.trapdoor[open] { padding-bottom: 1.1rem; }
 
 .workers-note {
