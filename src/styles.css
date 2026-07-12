@@ -75,17 +75,19 @@ body {
   padding: 2rem 1.25rem 3rem;
 }
 
-.lede h1 {
-  font-size: 2rem;
-  margin: 0 0 0.25rem;
-  letter-spacing: -0.02em;
-}
-.lede .sub {
-  color: var(--text-muted);
-  margin: 0 0 0.5rem;
-  font-size: 1.05rem;
-}
-.lede .toy-note {
+/* BEGIN cl-hero standard — managed, keep in sync across fleet */
+.cl-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(1rem,4vw,3rem);flex-wrap:wrap;margin:clamp(1rem,3vw,2rem) 0 1.5rem;}
+.cl-hero-main{flex:1 1 22rem;min-width:min(100%,20rem);}
+.cl-hero-title{margin:0;font-size:clamp(1.6rem,3.8vw,2.7rem);font-weight:700;line-height:1.1;letter-spacing:.01em;color:var(--text);}
+.cl-hero-sub{margin:.4rem 0 0;font-size:clamp(.9rem,1.6vw,1.05rem);letter-spacing:.01em;opacity:.85;color:var(--text);}
+.cl-hero-desc{margin:.55rem 0 0;font-size:1rem;line-height:1.5;color:var(--text-muted);max-width:60ch;}
+.cl-hero-why{flex:0 1 min(40%,26rem);min-width:min(100%,15rem);border:1px solid var(--border);border-radius:10px;padding:.85rem 1.05rem;background:color-mix(in oklab,var(--accent) 6%,transparent);}
+.cl-hero-why-label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.14em;color:var(--accent-text);}
+.cl-hero-why-text{margin:.35rem 0 0;font-size:.95rem;line-height:1.5;color:var(--text);}
+@media (max-width:640px){.cl-hero{flex-direction:column;}.cl-hero-why{flex-basis:auto;width:100%;}}
+/* END cl-hero standard */
+
+.cl-hero .toy-note {
   display: inline-block;
   font-size: 0.8rem;
   color: var(--warn-text);
@@ -309,7 +311,6 @@ details.trapdoor[open] { padding-bottom: 1.1rem; }
 
 @media (max-width: 640px) {
   #app { padding: 1.25rem 0.9rem 2.5rem; }
-  .lede h1 { font-size: 1.6rem; }
   .row { flex-direction: column; align-items: stretch; }
   .opcontrast { flex-direction: column; }
   table.cmp, table.cmp tbody, table.cmp tr, table.cmp td, table.cmp th { display: block; }

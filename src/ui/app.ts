@@ -83,12 +83,21 @@ export function mount(root: HTMLElement): void {
 
 // ── 0. Lede ──────────────────────────────────────────────────────────────────
 function lede(): HTMLElement {
-  return el('header', { class: 'lede' }, [
-    el('h1', {}, ['Verifiable Delay Functions']),
-    el('p', { class: 'sub' }, [
-      'A puzzle that takes a long, unskippable time to solve — yet anyone can check the answer in an instant.',
+  return el('header', { class: 'cl-hero' }, [
+    el('div', { class: 'cl-hero-main' }, [
+      el('h1', { class: 'cl-hero-title' }, ['VDF']),
+      el('p', { class: 'cl-hero-sub' }, ['Verifiable Delay Function · Wesolowski proof']),
+      el('p', { class: 'cl-hero-desc' }, [
+        'Evaluate a VDF by repeated modular squaring, watch the sequential work accrue, then verify the short Wesolowski proof almost instantly — and try to cheat with the trapdoor.',
+      ]),
+      el('div', {}, [el('span', { class: 'toy-note' }, ['Toy modulus — for illustration, not security.'])]),
     ]),
-    el('div', {}, [el('span', { class: 'toy-note' }, ['Toy modulus — for illustration, not security.'])]),
+    el('aside', { class: 'cl-hero-why', 'aria-label': 'Why it matters' }, [
+      el('span', { class: 'cl-hero-why-label' }, ['WHY IT MATTERS']),
+      el('p', { class: 'cl-hero-why-text' }, [
+        'VDFs give the internet a clock nobody can fast-forward: no amount of hardware buys a shortcut. That makes them the backbone of unbiasable randomness beacons, fair leader election, and front-running-resistant systems.',
+      ]),
+    ]),
   ]);
 }
 
