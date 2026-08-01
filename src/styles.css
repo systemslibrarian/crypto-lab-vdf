@@ -75,7 +75,6 @@ body {
   padding: 2rem 1.25rem 3rem;
 }
 
-/* BEGIN cl-hero standard — managed, keep in sync across fleet */
 .cl-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:clamp(1rem,4vw,3rem);flex-wrap:wrap;margin:clamp(1rem,3vw,2rem) 0 1.5rem;}
 .cl-hero-main{flex:1 1 22rem;min-width:min(100%,20rem);}
 .cl-hero-title{margin:0;font-size:clamp(1.6rem,3.8vw,2.7rem);font-weight:700;line-height:1.1;letter-spacing:.01em;color:var(--text);}
@@ -84,8 +83,7 @@ body {
 .cl-hero-why{flex:0 1 min(40%,26rem);min-width:min(100%,15rem);border:1px solid var(--border);border-radius:10px;padding:.85rem 1.05rem;background:color-mix(in oklab,var(--accent) 6%,transparent);}
 .cl-hero-why-label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.14em;color:var(--accent-text);}
 .cl-hero-why-text{margin:.35rem 0 0;font-size:.95rem;line-height:1.5;color:var(--text);}
-@media (max-width:640px){.cl-hero{flex-direction:column;}.cl-hero-why{flex-basis:auto;width:100%;}}
-/* END cl-hero standard */
+@media (max-width:640px){.cl-hero{flex-direction:column;}.cl-hero-why{flex-basis:auto;width:100%;}.cl-hero-main{flex-basis:auto;min-width:0;}}
 
 .cl-hero .toy-note {
   display: inline-block;
@@ -149,6 +147,7 @@ button {
   background-color: var(--accent);
   color: #15121f;
   padding: 0.55rem 1.1rem;
+  min-height: 44px;
   cursor: pointer;
 }
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
@@ -206,6 +205,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
   position: absolute;
   top: 5px;
   right: 5px;
+  min-height: 0;
   padding: 0.15rem 0.5rem;
   font-size: 0.72rem;
   background-color: var(--bg-panel);
@@ -316,4 +316,15 @@ details.trapdoor[open] { padding-bottom: 1.1rem; }
   table.cmp, table.cmp tbody, table.cmp tr, table.cmp td, table.cmp th { display: block; }
   table.cmp tr { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.7rem; padding: 0.3rem 0.5rem; }
   table.cmp th, table.cmp td { border-bottom: none; padding: 0.3rem 0.4rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
