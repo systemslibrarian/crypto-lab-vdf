@@ -14,6 +14,14 @@
   --bg-panel: #171a23;
   --bg-inset: #0b0d13;
   --border: #262b38;
+  /* Control boundaries only (WCAG 2.1 SC 1.4.11). Text fields are filled with
+     --bg-inset (#0b0d13), which is 1.37:1 against --bg and 1.68:1 against
+     --bg-panel, so the border is the only thing delineating the field. #656972
+     keeps the slate-blue cast of --border and clears 3:1 on every surface a
+     field sits on: 3.43:1 on --bg, 3.16:1 on --bg-panel, 3.53:1 on --bg-inset.
+     --border itself is unchanged — it still carries panel outlines, dividers
+     and table rules, which are decorative. */
+  --border-strong: #656972;
   --text: #e6e8ee;
   --text-muted: #9aa3b5;
   --mono: #c9d2e3;
@@ -38,6 +46,10 @@
   --bg-panel: #ffffff;
   --bg-inset: #eef1f7;
   --border: #d9dee9;
+  /* Light-theme control boundary, same rationale as the dark token above.
+     #84878e: 3.58:1 on --bg-panel (#ffffff), 3.34:1 on --bg (#f6f7fb),
+     3.16:1 on --bg-inset (#eef1f7). */
+  --border-strong: #84878e;
   --text: #1b2030;
   --text-muted: #5a6478;
   --mono: #28324a;
@@ -125,7 +137,9 @@ input[aria-invalid="true"] { border-color: var(--alarm); }
 input[type="text"], input[type="number"] {
   width: 100%;
   background-color: var(--bg-inset);
-  border: 1px solid var(--border);
+  /* --border-strong, not --border: the fill is within 1.37:1 of the surround,
+     so this border is load-bearing. See the token definition for ratios. */
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   color: var(--text);
   padding: 0.55rem 0.7rem;
