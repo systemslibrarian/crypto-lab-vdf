@@ -121,7 +121,9 @@ function whatIsPanel(): HTMLElement {
         ' is fast both ways; ', strong('proof-of-work'),
         ' is parallelizable (more miners = faster); a ', strong('time-lock puzzle'),
         ' has the delay but ', em('no'),
-        ' fast public proof — only the holder of a secret can open it. The VDF keeps the delay and adds public, cheap verification.',
+        ' fast public proof. Anyone can open a time-lock puzzle by performing the T sequential squarings — that is the whole point of the construction (Rivest–Shamir–Wagner, 1996); its trapdoor, the factorization of N, only lets the ',
+        em('creator'),
+        ' build the puzzle without doing the work. What it lacks is a proof: to check a claimed answer you must redo the T squarings yourself (or hold the trapdoor). The VDF keeps the delay and adds public, cheap verification.',
       ]),
       el('p', {}, [
         'This demo uses repeated squaring in a group of unknown order: ',
@@ -373,8 +375,9 @@ function comparisonPanel(): HTMLElement {
       el('tr', {}, [el('th', {}, ['Property']), el('th', {}, ['Time-lock puzzle']), el('th', {}, ['VDF'])]),
       el('tr', {}, [el('td', {}, ['Requires sequential work']), el('td', {}, [yes('Yes ✓')]), el('td', {}, [yes('Yes ✓')])]),
       el('tr', {}, [el('td', {}, ['Resists parallel speedup']), el('td', {}, [yes('Yes ✓')]), el('td', {}, [yes('Yes ✓')])]),
-      el('tr', {}, [el('td', {}, ['Fast public verification']), el('td', {}, [no('No ✗')]), el('td', {}, [yes('Yes ✓')])]),
-      el('tr', {}, [el('td', {}, ['Anyone can check, no secret needed']), el('td', {}, [no('No ✗ — needs the trapdoor to open')]), el('td', {}, [yes('Yes ✓ — short proof')])]),
+      el('tr', {}, [el('td', {}, ['Anyone can solve it, no secret needed']), el('td', {}, [yes('Yes ✓ — just do the T squarings')]), el('td', {}, [yes('Yes ✓ — just do the T squarings')])]),
+      el('tr', {}, [el('td', {}, ['Ships a succinct proof of the result']), el('td', {}, [no('No ✗')]), el('td', {}, [yes('Yes ✓ — one short proof')])]),
+      el('tr', {}, [el('td', {}, ['Cost for a third party to check an answer']), el('td', {}, [no('Redo all T squarings (or hold the trapdoor)')]), el('td', {}, [yes('A handful of operations')])]),
       el('tr', {}, [el('td', {}, ['Typical use']), el('td', {}, ['Send a message into the future']), el('td', {}, ['Publicly trustworthy delay & randomness'])]),
     ]),
   );
