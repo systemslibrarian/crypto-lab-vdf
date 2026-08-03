@@ -32,8 +32,10 @@ is for teaching, not for protecting anything real.
 **https://systemslibrarian.github.io/crypto-lab-vdf/**
 
 Choose an input `x` and a difficulty `T` (the number of sequential squaring steps), then watch
-the work accrue one squaring at a time — including a control that shows extra "workers" do
-*not* speed it up. The Verify panel then checks the short proof in a handful of operations and
+the work accrue one squaring at a time — including a control that actually runs the same `x`
+and `T` across four "workers": chained, they still spend every one of the T squarings and
+reproduce `y` exactly; started together, they finish in a quarter of the steps and land on a
+*different* number, which is why the shortcut is not one. The Verify panel then checks the short proof in a handful of operations and
 shows the eval-vs-verify cost gap, with Tamper buttons that flip a bit of the output or proof
 so you can see verification fail-closed. A clearly-labeled "reveal the trapdoor" section shows
 how knowing `N`'s secret factors collapses the whole delay — exactly what a VDF assumes no one
@@ -48,7 +50,13 @@ npm install
 npm run dev
 ```
 
-No environment variables are required. Run `npm test` for the cryptographic test suite.
+No environment variables are required. Run `npm test` for the cryptographic test suite, and
+`npm run test:e2e` for the browser suites: `e2e/a11y.spec.ts` (WCAG A/AA in both themes) and
+`e2e/claims.spec.ts`, which drives the built page and checks every on-screen claim against
+values the page computed — the step count the difficulty control asked for, the eval/verify
+cost tiles against each other, both tamper paths reaching a rejection that names its cause,
+the trapdoor's `y` against the honest `y`, and the four-worker exhibit's own arithmetic. Any
+uncaught page exception fails the run.
 
 ## Part of the Crypto-Lab Suite
 

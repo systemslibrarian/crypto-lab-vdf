@@ -3,9 +3,13 @@
 
 import { N, resetOps } from '../vdf/group';
 import { evaluateSteps, type EvalResult } from '../vdf/eval';
+import { raceWorkers } from '../vdf/parallel';
 import { prove, verify } from '../vdf/wesolowski';
 import { cheatWithFactors } from '../vdf/trapdoor';
 import { asSteps, type GroupElement, type Proof } from '../vdf/types';
+
+/** Lanes drawn, and workers actually run, by the parallelism control. */
+const WORKERS = 4;
 
 // ── tiny DOM helpers ─────────────────────────────────────────────────────────
 type Attrs = Record<string, string | number | boolean | EventListener>;
@@ -30,12 +34,18 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function monoBox(label: string, value: bigint, tampered = false): HTMLElement {
+function monoBox(label: string, value: bigint, tampered = false, key = ''): HTMLElement {
   const text = value.toString();
   const box = el('div', { class: 'mono-box' }, [
     el('span', { class: 'label' }, [label]),
     text,
   ]);
+  if (key) {
+    // Machine-readable handle on the exact value shown, so a test can compare
+    // the numbers two panels display without parsing the label out of the text.
+    box.setAttribute('data-mono', key);
+    box.setAttribute('data-value', text);
+  }
   if (tampered) {
     box.style.borderColor = 'var(--alarm)';
     box.append(el('span', { class: 'label', style: 'color:var(--alarm);margin-left:.6rem' }, ['(tampered)']));
@@ -167,6 +177,31 @@ function evaluatePanel(): HTMLElement {
   const evalBtn = el('button', { type: 'button', id: 'eval-btn' }, ['Evaluate']);
   const verifyEnable = () => document.getElementById('verify-btn')?.removeAttribute('disabled');
 
+  /**
+   * A result belongs to the x and T it was computed from. Editing either one
+   * used to leave the y, the proof and a "Verified ✓" status on screen next to
+   * inputs they were never computed from — the verdict outliving its input.
+   * Changing a control now retires the whole run.
+   */
+  const retireResult = (): void => {
+    if (!state.result && !state.proof) return;
+    state.result = null;
+    state.proof = null;
+    state.shownY = null;
+    state.shownPi = null;
+    output.replaceChildren();
+    counter.textContent = 'Input changed — press Evaluate to re-run.';
+    bar.style.width = '0';
+    progress.setAttribute('aria-valuenow', '0');
+    document.getElementById('verify-btn')?.setAttribute('disabled', '');
+    const verifyResult = document.getElementById('verify-result');
+    if (verifyResult) markStale(verifyResult, 'Input changed — press Evaluate to re-run, then Verify.');
+    const workersNote = document.getElementById('workers-note');
+    if (workersNote) { workersNote.replaceChildren(); workersNote.hidden = true; }
+  };
+  input.addEventListener('input', retireResult);
+  tExp.addEventListener('input', retireResult);
+
   evalBtn.addEventListener('click', () => {
     let inputBig: bigint;
     try {
@@ -232,42 +267,83 @@ async function finalizeEval(
   state.result = res;
   state.shownY = res.y;
   output.replaceChildren(
-    monoBox('N =', N),
-    monoBox('x =', res.x),
-    monoBox('y =', res.y),
+    monoBox('N =', N, false, 'n'),
+    monoBox('x =', res.x, false, 'x'),
+    monoBox('y =', res.y, false, 'y'),
     el('p', { class: 'counter' }, ['Generating the short proof…']),
   );
   const proof = await prove(res.x, res.y, res.t);
   state.proof = proof;
   state.shownPi = proof.pi;
   output.replaceChildren(
-    monoBox('N =', N),
-    monoBox('x =', res.x),
-    monoBox('y =', res.y),
+    monoBox('N =', N, false, 'n'),
+    monoBox('x =', res.x, false, 'x'),
+    monoBox('y =', res.y, false, 'y'),
     el('p', { class: 'counter' }, ['Short proof (computed once by the evaluator):']),
-    monoBox('ℓ =', proof.l),
-    monoBox('π =', proof.pi),
+    monoBox('ℓ =', proof.l, false, 'l'),
+    monoBox('π =', proof.pi, false, 'pi'),
   );
   evalBtn.removeAttribute('disabled');
   verifyEnable();
 }
 
+/**
+ * "Try 4 parallel workers" — a computation, not an animation.
+ *
+ * This control used to fill four CSS lanes to a fixed width and print a
+ * hardcoded sentence saying the step count was unchanged. True, but nothing on
+ * the page had computed it. It now runs both strategies over the SAME x and T
+ * the evaluate panel just used (see ../vdf/parallel.ts) and prints what each
+ * one produced: chained workers reproduce y in exactly T squarings, and workers
+ * started together finish in T/4 wall-clock steps but land on a different
+ * number. Every figure below is read out of that result.
+ */
 function workersControl(): HTMLElement {
-  const lanes = el('div', { class: 'workers-lanes' },
-    Array.from({ length: 4 }, () => el('div', { class: 'lane' }, [el('span', {})])));
-  const note = el('div', { class: 'workers-note', hidden: true }, [
-    'Four "workers" — and the step count is unchanged. Each squaring needs the output of the one before it, so the work is a single dependency chain. Parallelism cannot shorten it. ',
-    em('That inherent sequentiality is the delay.'),
-  ]);
-  const btn = el('button', { type: 'button', class: 'secondary' }, ['Try 4 parallel workers']);
+  const lanes = el('div', { class: 'workers-lanes', id: 'workers-lanes' },
+    Array.from({ length: WORKERS }, () => el('div', { class: 'lane' }, [el('span', {})])));
+  const note = el('div', { class: 'workers-note', id: 'workers-note', hidden: true });
+  const btn = el('button', { type: 'button', class: 'secondary', id: 'workers-btn' }, ['Try 4 parallel workers']);
+
   btn.addEventListener('click', () => {
     note.hidden = false;
+    if (!state.result) {
+      note.replaceChildren('Evaluate something first — then this runs the same x and T across four workers.');
+      return;
+    }
+    const r = state.result;
+    const race = raceWorkers(r.x, r.t, WORKERS);
+    const matchesHonestRun = race.chainedY === r.y;
+
+    // Lanes fill one after another: the dependency chain, drawn to scale.
     lanes.querySelectorAll<HTMLElement>('.lane > span').forEach((s, i) => {
-      s.style.transition = 'none'; s.style.width = '0';
-      // all lanes advance together but none finishes sooner — they're stuck waiting on each other
-      setTimeout(() => { s.style.transition = 'width 1.2s linear'; s.style.width = `${25 + i * 0}%`; }, 30);
+      s.style.transition = 'none';
+      s.style.width = '0';
+      setTimeout(() => {
+        s.style.transition = `width .5s linear ${i * 0.5}s`;
+        s.style.width = '100%';
+      }, 30);
     });
+
+    note.replaceChildren(
+      el('p', { id: 'workers-chained' }, [
+        `Chained across ${race.workers} workers: ${race.stepsPerWorker.join(' + ')} = `,
+        strong(`${race.totalSteps.toLocaleString()} squarings`),
+        ` — exactly the ${r.t.toLocaleString()} the single-threaded run needed, and it lands on `,
+        strong(matchesHonestRun ? 'the same y' : 'a different y'),
+        '. Worker 2 cannot start until worker 1 finishes, so four workers bought nothing.',
+      ]),
+      el('p', { id: 'workers-together' }, [
+        `Started together instead — ${race.parallelWallClockSteps.toLocaleString()} steps of wall clock each — they finish sooner and produce `,
+        strong(race.startedTogetherMatches ? 'the same y' : 'a different number'),
+        ': ',
+        el('code', { id: 'workers-together-y' }, [race.startedTogetherY.toString()]),
+        '. ',
+        em('A faster wrong answer is not a speed-up — that inherent sequentiality is the delay.'),
+      ]),
+      monoBox('y (workers chained) =', race.chainedY, false, 'chained-y'),
+    );
   });
+
   return el('div', {}, [el('div', { style: 'margin-top:.6rem' }, [btn]), lanes, note]);
 }
 
@@ -286,12 +362,12 @@ function verifyPanel(): HTMLElement {
     const out = document.getElementById('eval-output');
     if (!out || !state.proof) return;
     out.replaceChildren(
-      monoBox('N =', N),
-      monoBox('x =', state.result.x),
-      monoBox('y =', state.shownY, state.shownY !== state.result.y),
+      monoBox('N =', N, false, 'n'),
+      monoBox('x =', state.result.x, false, 'x'),
+      monoBox('y =', state.shownY, state.shownY !== state.result.y, 'y'),
       el('p', { class: 'counter' }, ['Short proof (computed once by the evaluator):']),
-      monoBox('ℓ =', state.proof.l),
-      monoBox('π =', state.shownPi, state.shownPi !== state.proof.pi),
+      monoBox('ℓ =', state.proof.l, false, 'l'),
+      monoBox('π =', state.shownPi, state.shownPi !== state.proof.pi, 'pi'),
     );
   };
 
@@ -325,10 +401,10 @@ function verifyPanel(): HTMLElement {
   return p;
 }
 
-function markStale(result: HTMLElement): void {
+function markStale(result: HTMLElement, message = 'Inputs changed — press Verify to re-check.'): void {
   result.replaceChildren(el('div', { class: 'status warn' }, [
     el('span', { class: 'ico' }, ['↻']),
-    el('div', {}, ['Inputs changed — press Verify to re-check.']),
+    el('div', {}, [message]),
   ]));
 }
 
@@ -418,7 +494,7 @@ function trapdoorPanel(): HTMLElement {
     const cheated = cheatWithFactors(r.x, r.t);
     const matches = cheated === r.y;
     out.replaceChildren(
-      monoBox('y (via secret factors) =', cheated),
+      monoBox('y (via secret factors) =', cheated, false, 'trapdoor-y'),
       el('div', { class: 'status warn' }, [
         el('span', { class: 'ico' }, ['⚠']),
         el('div', {}, [

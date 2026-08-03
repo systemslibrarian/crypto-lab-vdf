@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:a11y": "playwright test",
+    "test:a11y": "playwright test e2e/a11y.spec.ts",
+    "test:claims": "playwright test e2e/claims.spec.ts",
+    "test:e2e": "playwright test",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "devDependencies": {

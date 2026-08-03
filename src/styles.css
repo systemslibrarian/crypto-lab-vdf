@@ -128,6 +128,14 @@ body {
 
 label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
 
+/* The UA rule is `[hidden] { display: none }`, and ANY author `display` beats it
+   regardless of specificity. `.field-err` sets `display: block`, so the
+   validation alert below shipped with the `hidden` attribute AND still
+   rendered — an empty role="alert" exposed to assistive tech, and every
+   `hidden = true` in the code a silent no-op. This makes the attribute mean
+   what it says. */
+[hidden] { display: none !important; }
+
 .field-err { display: block; margin-top: 0.35rem; font-size: 0.85rem; color: var(--alarm); }
 input[aria-invalid="true"] { border-color: var(--alarm); }
 

@@ -6,6 +6,7 @@ import { LAMBDA, N, ops, powmodSmall, resetOps, toElement } from './group';
 import { evaluate } from './eval';
 import { hashToPrime, prove, verify } from './wesolowski';
 import { cheatWithFactors } from './trapdoor';
+import { raceWorkers, sliceSteps } from './parallel';
 import { asSteps } from './types';
 
 describe('evaluation correctness', () => {
@@ -124,6 +125,39 @@ describe('trapdoor', () => {
       expect(joined).not.toMatch(/trapdoor/);
       expect(joined).not.toMatch(/\bLAMBDA\b/);
       expect(joined).not.toMatch(/\bPHI\b/);
+    }
+  });
+});
+
+describe('parallel workers cannot shorten the chain', () => {
+  it('splits T into slices that sum to exactly T', () => {
+    for (const [t, w] of [[16, 4], [1024, 4], [17, 4], [3, 4]] as const) {
+      const slices = sliceSteps(t, w);
+      expect(slices).toHaveLength(w);
+      expect(slices.reduce((a, b) => a + b, 0)).toBe(t);
+    }
+  });
+
+  it('chained workers do exactly T squarings and reproduce the honest y', () => {
+    for (const t of [16, 256, 1000]) {
+      const T = asSteps(t);
+      const { y } = evaluate(42n, T);
+      resetOps();
+      const race = raceWorkers(42n, T);
+      expect(race.totalSteps).toBe(t);
+      expect(race.chainedY).toBe(y);
+      // Both strategies together spend 2T squarings plus the combine multiplies.
+      expect(ops()).toBe(2 * t + race.workers);
+    }
+  });
+
+  it('workers started together finish sooner and land on a different value', () => {
+    for (const t of [16, 256, 1000]) {
+      const T = asSteps(t);
+      const race = raceWorkers(42n, T);
+      expect(race.parallelWallClockSteps).toBeLessThan(race.totalSteps);
+      expect(race.startedTogetherY).not.toBe(race.chainedY);
+      expect(race.startedTogetherMatches).toBe(false);
     }
   });
 });
