@@ -1,81 +1,33 @@
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { test } from '@playwright/test';
+import { boot, driveAllStates, NARROW } from './gate';
 
 /**
- * WCAG regression gate. Deploys are already gated on the VDF/Wesolowski tests;
- * this gates them on accessibility the same way. Scans the whole page with every
- * collapsible expanded and every live demo driven, in both dark and light themes.
+ * WCAG A/AA regression gate.
+ *
+ * The lab is driven the way a visitor drives it: a non-numeric input rejected
+ * and corrected, the VDF evaluated through its T squarings, the Wesolowski
+ * proof verified and accepted, y tampered and rejected, reset, π tampered and
+ * rejected, reset, four parallel workers raced, the trapdoor panel opened by
+ * its summary and used to recompute y instantly, and finally the input changed
+ * so every result is retired. Every resulting state is scanned in both themes
+ * at desktop and phone width.
+ *
+ * See `gate.ts` for why nothing is injected into the page, why no hidden panel
+ * is force-revealed, why every step is scanned rather than only the last one,
+ * and why `violations` is not the whole oracle.
  */
 
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+for (const theme of ['dark', 'light'] as const) {
+  test(`no WCAG A/AA violations in ${theme} theme`, async ({ page }) => {
+    test.setTimeout(900_000);
+    await boot(page, theme);
+    await driveAllStates(page, theme);
+  });
 
-async function killMotion(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: `*,*::before,*::after{transition:none!important;animation:none!important;opacity:1!important}`,
+  test(`no WCAG A/AA violations in ${theme} theme at 380px`, async ({ page }) => {
+    test.setTimeout(900_000);
+    await page.setViewportSize(NARROW);
+    await boot(page, theme);
+    await driveAllStates(page, `${theme} @380px`);
   });
 }
-
-async function revealAll(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    for (const d of document.querySelectorAll('details')) d.open = true;
-    // Reveal any class/attr-hidden panels so their contents get scanned.
-    for (const h of document.querySelectorAll('[hidden]')) h.removeAttribute('hidden');
-  });
-}
-
-async function driveDemos(page: Page): Promise<void> {
-  // Evaluate the VDF (small T so it finishes fast).
-  await page.locator('#vdf-t').evaluate((elm) => {
-    const input = elm as HTMLInputElement;
-    input.value = '4';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await page.locator('#eval-btn').click();
-  // Proof generation is async; wait for the proof rows (ℓ / π) to appear.
-  await expect(page.locator('#eval-output')).toContainText('π', { timeout: 15_000 });
-
-  // Verify (enabled once the proof exists).
-  await page.locator('#verify-btn').click();
-  await expect(page.locator('#verify-result')).toContainText(/Verified|Rejected/, { timeout: 15_000 });
-
-  // Parallel-workers explainer.
-  const workers = page.getByRole('button', { name: 'Try 4 parallel workers' });
-  if (await workers.count()) await workers.first().click();
-
-  // Trapdoor path (inside a <details>, already opened by revealAll).
-  const trap = page.getByRole('button', { name: /Compute y instantly/ });
-  if (await trap.count()) await trap.first().click();
-}
-
-async function scan(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  const summary = results.violations.map((v) => ({
-    id: v.id,
-    impact: v.impact,
-    help: v.help,
-    nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5),
-  }));
-  expect(summary).toEqual([]);
-}
-
-test('no WCAG A/AA violations in dark theme', async ({ page }) => {
-  await page.goto('.');
-  await expect(page.locator('#app h1')).toBeVisible();
-  await killMotion(page);
-  await revealAll(page);
-  await driveDemos(page);
-  await revealAll(page);
-  await scan(page);
-});
-
-test('no WCAG A/AA violations in light theme', async ({ page }) => {
-  await page.goto('.');
-  await expect(page.locator('#app h1')).toBeVisible();
-  await page.locator('#cl-theme-toggle').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await killMotion(page);
-  await revealAll(page);
-  await driveDemos(page);
-  await revealAll(page);
-  await scan(page);
-});

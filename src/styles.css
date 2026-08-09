@@ -8,6 +8,12 @@
   --accent-text: var(--accent);
   --ok-text: var(--ok);
   --warn-text: var(--warn);
+  /* --alarm-text was the one missing member of this set, and its absence was
+     invisible because the only states that paint alarm-coloured TEXT are the
+     rejected verification and the tamper markers — states the previous gate
+     never drove. `.status.alarm`, `button.danger` and the "(tampered)" label
+     all reached for the raw --alarm hue instead. */
+  --alarm-text: var(--alarm);
 
   /* Dark palette (default). Light overrides below swap only these. */
   --bg: #0f1117;
@@ -64,7 +70,17 @@
   /* Small text needs darker inks than the swatch/border hues on light bg. */
   --accent-text: #6d28d9; /* 7.1:1 on white, 6.3:1 on inset */
   --ok-text: #047857;     /* 5.5:1 on white, 4.6:1 on ok-bg */
-  --warn-text: #8a5a00;   /* 5:1 on warn-bg pill */
+  /* #8a5a00 was measured on the warn-bg pill sitting directly on a panel and
+     was 5:1 there. Inside the trapdoor <details>, that same pill sits one
+     surface deeper and the composite lightens to rgb(234,222,208), where it
+     fell to 4.48:1. An ink measured against one surface is not measured for
+     the surface it ends up on. #7a4f00 is 5.38:1 on the deepest one. */
+  --warn-text: #7a4f00;
+  /* --alarm was chosen as a border and swatch hue; as small text it is 4.11:1
+     on the alarm-bg pill, 4.04:1 on a panel and 3.83:1 on the inset — every
+     one of them a fail. This is the same hue carried down: 5.82:1 on the pill,
+     6.48:1 on white. The BORDERS stay --alarm. */
+  --alarm-text: #b81d24;
 }
 
 * { box-sizing: border-box; }
@@ -136,7 +152,7 @@ label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bot
    what it says. */
 [hidden] { display: none !important; }
 
-.field-err { display: block; margin-top: 0.35rem; font-size: 0.85rem; color: var(--alarm); }
+.field-err { display: block; margin-top: 0.35rem; font-size: 0.85rem; color: var(--alarm-text); }
 input[aria-invalid="true"] { border-color: var(--alarm); }
 
 .row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
@@ -173,7 +189,7 @@ button {
   cursor: pointer;
 }
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
-button.danger { background: transparent; color: var(--alarm); border-color: var(--alarm); }
+button.danger { background: transparent; color: var(--alarm-text); border-color: var(--alarm); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visible summary {
   outline: 3px solid var(--accent);
@@ -247,7 +263,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
 }
 .status .ico { font-size: 1.2rem; line-height: 1; }
 .status.ok { color: var(--ok-text); background-color: var(--ok-bg); border-color: var(--ok); }
-.status.alarm { color: var(--alarm); background-color: var(--alarm-bg); border-color: var(--alarm); }
+.status.alarm { color: var(--alarm-text); background-color: var(--alarm-bg); border-color: var(--alarm); }
 .status.warn { color: var(--warn-text); background-color: var(--warn-bg); border-color: var(--warn); }
 .status small { display: block; font-weight: 400; color: var(--text-muted); }
 
@@ -283,7 +299,7 @@ table.cmp th, table.cmp td {
 }
 table.cmp th { color: var(--text-muted); font-weight: 600; }
 table.cmp td .yes { color: var(--ok-text); font-weight: 600; }
-table.cmp td .no { color: var(--alarm); font-weight: 600; }
+table.cmp td .no { color: var(--alarm-text); font-weight: 600; }
 
 ul.apps, ul.constructions { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 ul.apps li, ul.constructions li { margin: 0.45rem 0; }
@@ -307,6 +323,13 @@ details.trapdoor[open] { padding-bottom: 1.1rem; }
   border-left: 3px solid var(--accent);
   padding-left: 0.8rem;
 }
+/* The y this note quotes is a full 2048-bit modular integer printed inline in
+   a sentence — 617 decimal digits, 1301px wide. Every other big integer on the
+   page lives in a `.mono-box`, which is its own `overflow-x: auto` scroller;
+   this one is a bare `<code>` in running prose, so with nothing to break it the
+   document scrolled sideways to 1538px at desktop and at 380px alike (WCAG
+   1.4.10). It is prose, so it wraps rather than gaining a scroller. */
+.workers-note code { overflow-wrap: anywhere; }
 .workers-lanes { display: flex; gap: 4px; margin: 0.5rem 0; }
 .workers-lanes .lane {
   height: 8px; flex: 1; background: var(--bg-inset);

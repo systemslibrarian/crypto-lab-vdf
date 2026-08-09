@@ -48,7 +48,7 @@ function monoBox(label: string, value: bigint, tampered = false, key = ''): HTML
   }
   if (tampered) {
     box.style.borderColor = 'var(--alarm)';
-    box.append(el('span', { class: 'label', style: 'color:var(--alarm);margin-left:.6rem' }, ['(tampered)']));
+    box.append(el('span', { class: 'label', style: 'color:var(--alarm-text);margin-left:.6rem' }, ['(tampered)']));
   }
   box.append(
     el('button', {
@@ -199,6 +199,25 @@ function evaluatePanel(): HTMLElement {
     const workersNote = document.getElementById('workers-note');
     if (workersNote) { workersNote.replaceChildren(); workersNote.hidden = true; }
   };
+  /**
+   * The invalid-input state belongs to the value that was invalid.
+   *
+   * `aria-invalid="true"` and the "⚠ Enter a whole number." alert were only
+   * ever cleared inside the Evaluate handler, so typing a correct value left
+   * the field still announcing itself as invalid until the user pressed
+   * Evaluate again. A screen-reader user who fixed the field was told it was
+   * still broken — the same class of bug as the verdict outliving its input,
+   * which the block above already fixes for the result. `retireResult` cannot
+   * carry this: it returns early when there is no result, which is exactly the
+   * case here.
+   */
+  const clearInvalid = (): void => {
+    if (!input.hasAttribute('aria-invalid')) return;
+    input.removeAttribute('aria-invalid');
+    inputErr.hidden = true;
+    inputErr.textContent = '';
+  };
+  input.addEventListener('input', clearInvalid);
   input.addEventListener('input', retireResult);
   tExp.addEventListener('input', retireResult);
 
