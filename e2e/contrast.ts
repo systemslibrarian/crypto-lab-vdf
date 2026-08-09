@@ -482,7 +482,15 @@ export async function auditContrast(page: Page, within = 'body *'): Promise<Cont
       // focus. Measuring the parked copy invents a failure for text that is not
       // on screen; the focused rendering is a real state and the gate scans it
       // explicitly instead.
-      if (r.right <= 0 || r.bottom <= 0) return false;
+      // Document space, NOT viewport space. `getBoundingClientRect()` is
+      // relative to the viewport, so after Playwright scrolls a control into
+      // view every element ABOVE the viewport has `bottom <= 0` and this guard
+      // silently dropped it from the walk. On a page taller than the viewport
+      // that is most of the document, and it is why a green contrast run on a
+      // long page could not be trusted. Adding the scroll offset restores the
+      // original intent — text parked off the top/left of the DOCUMENT, the
+      // "visually hidden until focused" idiom — without hiding the page.
+      if (r.right + window.scrollX <= 0 || r.bottom + window.scrollY <= 0) return false;
       // Scrolled out of an `overflow: auto` container — clipped, not painted.
       if (clippedAway(el, r)) return false;
       return true;
