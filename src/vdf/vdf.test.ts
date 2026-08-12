@@ -64,6 +64,22 @@ describe('fail-closed', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('rejects a non-canonical proof π + N', async () => {
+    // groupPow() reduces its base mod N, so π and π+N are the same group element and the
+    // identity held: an ALTERED proof verified, under a page that promises "a real VDF must
+    // reject any altered output or proof". π is now range-checked like x and y.
+    const t = asSteps(64);
+    const { x, y } = evaluate(42n, t);
+    const proof = await prove(x, y, t);
+    expect((await verify(x, y, t, proof)).ok, 'the untampered proof still verifies').toBe(true);
+    const res = await verify(x, y, t, { l: proof.l, pi: (proof.pi + N) as typeof proof.pi });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('bad-input');
+    const negative = await verify(x, y, t, { l: proof.l, pi: 0n as typeof proof.pi });
+    expect(negative.ok).toBe(false);
+    expect(negative.reason).toBe('bad-input');
+  });
+
   it('rejects an out-of-range output', async () => {
     const t = asSteps(8);
     const { x, y } = evaluate(42n, t);
@@ -87,32 +103,101 @@ describe('Fiat–Shamir challenge binding', () => {
   });
 });
 
+/** Every difficulty the shipped slider can select: 2^4 … 2^14. */
+const SLIDER_T = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((e) => asSteps(2 ** e));
+
 describe('cost invariant: verify is ~constant in T, eval is linear in T', () => {
+  /**
+   * The old version of this test ran t ∈ {2048, 8192, 16384} only and asserted
+   * `verifierOps < t / 3`. That is true at those three values and FALSE at five of the
+   * eleven the slider can actually reach — the test was scoped past its own counterexample,
+   * and the page shipped "≈ 1× cheaper to verify than to compute" beside 16 and 208.
+   *
+   * The honest invariant is a bound, not a comparison: the verifier's cost does not GROW
+   * with T. Whether it is the cheaper side is then a fact about T, and the test asserts that
+   * BOTH regimes exist so no rendering may state the comparison unconditionally.
+   */
+  const verifierOpsAt = async (t: number) => {
+    const T = asSteps(t);
+    const { x, y } = evaluate(1234n, T);
+    const proof = await prove(x, y, T);
+    const res = await verify(x, y, T, proof);
+    return res.verifierOps;
+  };
+
   it("verifier op count does not grow with T while eval's does", async () => {
-    const mk = async (t: number) => {
-      const T = asSteps(t);
-      const { x, y } = evaluate(1234n, T);
-      const proof = await prove(x, y, T);
-      const res = await verify(x, y, T, proof);
-      return res.verifierOps;
-    };
     // Verifier cost is O(log ℓ + log N) — bounded by a constant independent of T (it varies
-    // only with the bit-pattern of ℓ and r, both ~128 bits), and always ≪ the T squarings.
+    // only with the bit-pattern of ℓ and r, both ~128 bits).
     const CONST_CEILING = 600; // ~2·128 group ops for the two short exponentiations, plus slack
-    for (const t of [2048, 8192, 16384]) {
-      const v = await mk(t);
-      expect(v).toBeLessThan(CONST_CEILING); // does not grow with T
-      expect(v).toBeLessThan(t / 3);         // far cheaper than re-running the delay
+    for (const t of SLIDER_T) {
+      const v = await verifierOpsAt(t);
+      expect(v, `T=${t}`).toBeGreaterThan(0);
+      expect(v, `T=${t}`).toBeLessThan(CONST_CEILING); // does not grow with T
     }
+    // Eval cost, by contrast, is exactly T.
+    for (const t of SLIDER_T) {
+      resetOps();
+      evaluate(1234n, t);
+      expect(ops(), `T=${t}`).toBe(t);
+    }
+  });
+
+  it('the slider reaches difficulties where verifying costs MORE than evaluating', async () => {
+    const dearer: number[] = [];
+    const cheaper: number[] = [];
+    for (const t of SLIDER_T) {
+      ((await verifierOpsAt(t)) >= t ? dearer : cheaper).push(t);
+    }
+    // Both regimes must be reachable. If either list is empty the page's cost tile could
+    // state its comparison unconditionally — and this test would have nothing to say.
+    expect(dearer.length, `no difficulty where verify costs more: ${JSON.stringify(dearer)}`)
+      .toBeGreaterThan(0);
+    expect(cheaper.length).toBeGreaterThan(0);
+    // Documented measurement: T = 16…256 are the dear ones.
+    expect(Math.min(...dearer)).toBe(16);
+    expect(Math.max(...cheaper)).toBe(16384);
   });
 });
 
 describe('trapdoor', () => {
   it('produces the same y as honest evaluation (so the shortcut is real)', () => {
-    for (const t of [8, 64, 500]) {
+    for (const t of [8, 64, 500, 2048, 16384]) {
       const { y } = evaluate(42n, asSteps(t));
       expect(cheatWithFactors(42n, asSteps(t))).toBe(y);
     }
+  });
+
+  /**
+   * The shortcut is constant in T, NOT free — and the old test asserted only that it lands on
+   * the same y, at t ∈ {8, 64, 500}, every one of which is inside the range where the
+   * "shortcut" is the SLOWER path. Meanwhile the panel said "no delay at all" and "skipped
+   * all 128 squarings" while the trapdoor did 129 operations against the honest 128.
+   *
+   * Cause: cheatWithFactors reduces 2^T mod λ(N), and λ(N) is 511 bits, so for every T ≤ 510
+   * the reduction is a no-op and groupPow spends T+1 operations.
+   */
+  it('costs ~constant work in T — which is MORE than the honest run at small T', () => {
+    const cost = (t: number) => {
+      resetOps();
+      cheatWithFactors(42n, asSteps(t));
+      return ops();
+    };
+    const CONST_CEILING = 900; // ~1.5·|λ(N)| group ops, whatever T is
+    const slower: number[] = [];
+    const faster: number[] = [];
+    for (const t of SLIDER_T) {
+      const c = cost(t);
+      expect(c, `T=${t}`).toBeLessThan(CONST_CEILING); // constant in T, unlike the honest path
+      (c < t ? faster : slower).push(t);
+    }
+    // Both regimes must exist, or "no delay at all" could be printed unconditionally.
+    expect(slower.length, `no difficulty where the trapdoor is slower: ${JSON.stringify(slower)}`)
+      .toBeGreaterThan(0);
+    expect(faster.length).toBeGreaterThan(0);
+    // The measured facts the panel's conditional prose is built on.
+    expect(cost(16)).toBe(17);          // one operation MORE than the 16 honest squarings
+    expect(Math.max(...slower)).toBe(512);
+    expect(Math.min(...faster)).toBe(1024);
   });
 
   it('is isolated: eval.ts and wesolowski.ts never import the trapdoor or group order', () => {

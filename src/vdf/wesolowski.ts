@@ -78,6 +78,12 @@ export async function verify(x: GroupElement, y: GroupElement, t: Steps, proof: 
   if (y < 0n || y >= N || x <= 0n || x >= N) {
     return { ok: false, reason: 'out-of-range', verifierOps: 0 };
   }
+  // π must be canonically encoded in [1, N). groupPow() silently reduces its base mod N, so
+  // without this check π and π+N are the same proof and an "altered proof" would be ACCEPTED —
+  // which the page's own hint ("a real VDF must reject any altered output or proof") denies.
+  if (proof.pi <= 0n || proof.pi >= N) {
+    return { ok: false, reason: 'bad-input', verifierOps: 0 };
+  }
   const before = ops();
   const l = await hashToPrime(x, y, t);          // re-derive challenge from the claimed values
   const r = powmodSmall(2n, BigInt(t), l);       // cheap mod-ℓ pre-step (uncounted)
