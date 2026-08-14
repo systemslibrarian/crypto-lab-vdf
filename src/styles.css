@@ -181,14 +181,24 @@ button {
   font: inherit;
   font-weight: 600;
   border-radius: 8px;
-  border: 1px solid var(--accent);
+  /* --accent-text, not --accent: the fill IS --accent, and in the light theme
+     that fill is only 2.72:1 against a white panel, so the border is the
+     control's boundary (WCAG 1.4.11) and must clear 3:1 on its own.
+     --accent-text is 7.1:1 on white; in the dark theme it aliases --accent,
+     so nothing changes there. This was the under-applied pattern: the
+     boundary token stopped at text fields and every button sat in the
+     nontext-baseline to-do list instead. */
+  border: 1px solid var(--accent-text);
   background-color: var(--accent);
   color: #15121f;
   padding: 0.55rem 1.1rem;
   min-height: 44px;
   cursor: pointer;
 }
-button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+/* --border-strong for the same reason as the text fields above: a transparent
+   fill leaves the border as the only boundary, and --border is 1.23:1 against
+   the panel it sits on. */
+button.secondary { background: transparent; color: var(--text); border-color: var(--border-strong); }
 button.danger { background: transparent; color: var(--alarm-text); border-color: var(--alarm); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visible summary {
@@ -248,7 +258,10 @@ button:focus-visible, input:focus-visible, a:focus-visible, details:focus-visibl
   font-size: 0.72rem;
   background-color: var(--bg-panel);
   color: var(--text-muted);
-  border: 1px solid var(--border);
+  /* The panel-on-inset fill is 1.68:1 — invisible as a boundary — so the
+     border carries WCAG 1.4.11 here too: --border-strong is 3.5:1 on the
+     inset surface this button sits on. */
+  border: 1px solid var(--border-strong);
 }
 
 .status {

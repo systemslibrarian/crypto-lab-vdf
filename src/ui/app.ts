@@ -69,10 +69,28 @@ function monoBox(label: string, value: bigint, tampered = false, key = ''): HTML
 interface State {
   result: EvalResult | null;
   proof: Proof | null;
+  proveOps: number;             // mod-N operations prove() spent generating π for this run
   shownY: GroupElement | null;  // what the verifier is handed (may be tampered)
   shownPi: GroupElement | null; // proof element handed to the verifier (may be tampered)
 }
-const state: State = { result: null, proof: null, shownY: null, shownPi: null };
+const state: State = { result: null, proof: null, proveOps: 0, shownY: null, shownPi: null };
+
+/**
+ * The caption over ℓ and π. It used to read "Short proof (computed once by the evaluator)",
+ * which let the run look like: do the T squarings, get a tiny proof for free, verify cheaply.
+ * The middle step is not free: prove() runs a SECOND square-and-multiply exponentiation by
+ * ⌊2^T/ℓ⌋ — roughly another T group operations. So the cost is measured and stated. At the
+ * slider's low end the statement flips the other way: 2^T is smaller than the 128-bit ℓ, the
+ * quotient is 0, π is the constant 1 and generating it costs nothing — also worth saying,
+ * because it is the same "π = 1" regime the pre-check-rejection test drives.
+ */
+function proofCaption(proveOps: number): HTMLElement {
+  return el('p', { class: 'counter', id: 'prove-cost', 'data-prove-ops': proveOps }, [
+    proveOps > 0
+      ? `Short proof — generating it cost the evaluator a second exponentiation of ${proveOps.toLocaleString()} more mod-N operations. Only verification is cheap; this simple prover redoes ~T work:`
+      : 'Short proof — at this T the challenge ℓ exceeds 2^T, so ⌊2^T/ℓ⌋ = 0, π = 1, and generating it cost no group operations:',
+  ]);
+}
 
 function flipLowBit(v: GroupElement): GroupElement {
   return ((((v ^ 1n) % N) + N) % N) as GroupElement;
@@ -140,7 +158,9 @@ function whatIsPanel(): HTMLElement {
         el('code', {}, ['y = x^(2^T) mod N']),
         '. Each squaring depends on the one before, so computing y needs T steps in a row. The ',
         strong('Wesolowski proof'),
-        ' then lets a verifier confirm y with only a handful of operations.',
+        ' then lets a verifier confirm y with only a handful of operations. One honesty note: a real VDF needs the order of the group to be unknown to ',
+        em('everyone'),
+        ', but this page ships the factors of its toy N in its own bundle so the trapdoor exhibit below can use them — the honest evaluator and verifier are honest by construction (their code never reads the factors), not because the factors are secret here.',
       ]),
     ]),
   );
@@ -209,6 +229,7 @@ function evaluatePanel(): HTMLElement {
     evalBtn.removeAttribute('disabled');
     state.result = null;
     state.proof = null;
+    state.proveOps = 0;
     state.shownY = null;
     state.shownPi = null;
     output.replaceChildren();
@@ -327,17 +348,20 @@ async function finalizeEval(
     monoBox('y =', res.y, false, 'y'),
     el('p', { class: 'counter' }, ['Generating the short proof…']),
   );
+  const opsBefore = ops();
   const proof = await prove(res.x, res.y, res.t);
+  const proveOps = ops() - opsBefore;
   // prove() awaits: an input may have changed while it ran, and retireResult has already
   // cleared state. Writing the proof here would resurrect the retired run.
   if (!isCurrent()) return;
   state.proof = proof;
+  state.proveOps = proveOps;
   state.shownPi = proof.pi;
   output.replaceChildren(
     monoBox('N =', N, false, 'n'),
     monoBox('x =', res.x, false, 'x'),
     monoBox('y =', res.y, false, 'y'),
-    el('p', { class: 'counter' }, ['Short proof (computed once by the evaluator):']),
+    proofCaption(proveOps),
     monoBox('ℓ =', proof.l, false, 'l'),
     monoBox('π =', proof.pi, false, 'pi'),
   );
@@ -435,7 +459,7 @@ function verifyPanel(): HTMLElement {
       monoBox('N =', N, false, 'n'),
       monoBox('x =', state.result.x, false, 'x'),
       monoBox('y =', state.shownY, state.shownY !== state.result.y, 'y'),
-      el('p', { class: 'counter' }, ['Short proof (computed once by the evaluator):']),
+      proofCaption(state.proveOps),
       monoBox('ℓ =', state.proof.l, false, 'l'),
       monoBox('π =', state.shownPi, state.shownPi !== state.proof.pi, 'pi'),
     );
@@ -520,7 +544,9 @@ function renderVerify(host: HTMLElement, ok: boolean, reason: string, t: number,
       ? 'Output is outside the group [0, N). Rejected before any check.'
       : reason === 'bad-input'
         ? 'The proof element π is outside the group [0, N) — non-canonical encoding. Rejected before any check.'
-        : 'The identity π^ℓ · x^r ≡ y failed — the output or proof was altered. Rejected.';
+        : reason === 'challenge-mismatch'
+          ? 'The identity holds under the derived challenge, but the transmitted ℓ is not the one this transcript derives — the proof object was altered. Rejected.'
+          : 'The identity π^ℓ · x^r ≡ y failed — the output or proof was altered. Rejected.';
   host.replaceChildren(
     el('div', { class: `status ${ok ? 'ok' : 'alarm'}` }, [
       el('span', { class: 'ico' }, [ok ? '✓' : '✗']),
@@ -576,12 +602,12 @@ function comparisonPanel(): HTMLElement {
 
 // ── 5. Applications ──────────────────────────────────────────────────────────
 function applicationsPanel(): HTMLElement {
-  const p = panel('5', 'Where VDFs are used', 'High-level — each relies on "delay that everyone can trust without re-doing the work."');
+  const p = panel('5', 'Where VDFs are used', 'High-level — each relies on "delay that everyone can trust without re-doing the work." In every one the VDF is a component: the fairness claim belongs to the surrounding protocol, not to the delay alone.');
   p.append(el('ul', { class: 'apps' }, [
-    li('Randomness beacons', 'Feed many parties’ inputs through a VDF so no one can grind or bias the result — the delay outlasts any attempt to manipulate it.'),
-    li('Blockchain leader election', 'Pick the next proposer from a value no participant could have predicted or skewed in advance.'),
-    li('Fair lotteries & sealed-bid auctions', 'Lock in commitments, then reveal a verifiably-delayed outcome nobody could front-run.'),
-    li('Anti front-running', 'Order or reveal transactions only after a mandatory, publicly-checkable delay, blunting mempool sniping.'),
+    li('Randomness beacons', 'Applied to input many parties generated together, the delay blunts grinding and last-revealer advantage — unbiasability still needs the surrounding commit-and-combine protocol.'),
+    li('Blockchain leader election', 'Helps derive the next proposer from a seed no participant could predict in time to bias, inside a larger protocol of seed generation, eligibility rules and consensus.'),
+    li('Fair lotteries & sealed-bid auctions', 'Lock in commitments, then reveal a verifiably-delayed outcome that was fixed before anyone could react to it.'),
+    li('Anti front-running', 'Supports delayed-reveal and ordered-execution designs with a mandatory, publicly-checkable delay, blunting mempool sniping.'),
   ]));
   return p;
 }
@@ -653,9 +679,9 @@ function trapdoorPanel(): HTMLElement {
   const d = el('details', { class: 'trapdoor' }, [
     el('summary', {}, ['⚠ Reveal the trapdoor — what the VDF assumes nobody can do']),
     el('p', {}, [
-      'The honest evaluator does not know how N factors, so it must grind through every squaring. Anyone who ',
+      'The honest evaluator never reads how N factors, so it must grind through every squaring. Anyone who ',
       em('did'),
-      ' know the factors could shortcut the whole thing. This isolated path uses the secret factors to prove the point — it is never the default and is never part of evaluation or verification.',
+      ' use the factors could shortcut the whole thing. This isolated path uses them to prove the point — it is never the default and is never part of evaluation or verification. And to be plain about this deployed demo: P and Q ship in the public page bundle (any visitor can read them), so the delay here is honest by code path, not by secrecy. In a real VDF nobody may know the factors at all.',
     ]),
     el('div', {}, [btn]),
     out,

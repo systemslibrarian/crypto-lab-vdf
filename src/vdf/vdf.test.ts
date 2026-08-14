@@ -7,7 +7,7 @@ import { evaluate } from './eval';
 import { hashToPrime, prove, verify } from './wesolowski';
 import { cheatWithFactors } from './trapdoor';
 import { raceWorkers, sliceSteps } from './parallel';
-import { asSteps } from './types';
+import { MAX_STEPS, asSteps } from './types';
 
 describe('evaluation correctness', () => {
   it('T sequential squarings equal x^(2^T) mod N via the group-order shortcut', () => {
@@ -80,6 +80,24 @@ describe('fail-closed', () => {
     expect(negative.reason).toBe('bad-input');
   });
 
+  it('rejects a proof whose transmitted ℓ disagrees with the derived challenge', async () => {
+    // verify() derives ℓ itself, which is the cryptographically load-bearing half — but the
+    // proof object also CARRIES an ℓ, and the page displays it as part of the proof. Ignoring
+    // the field entirely meant an altered ℓ still verified, against the page's own promise
+    // that a real VDF must reject any altered output or proof.
+    const t = asSteps(64);
+    const { x, y } = evaluate(42n, t);
+    const proof = await prove(x, y, t);
+    expect((await verify(x, y, t, proof)).ok, 'the untampered proof still verifies').toBe(true);
+    const res = await verify(x, y, t, { l: proof.l + 2n, pi: proof.pi });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('challenge-mismatch');
+    // The check runs AFTER the identity so a tampered x, y or T still reports as the identity
+    // failure it is — only an altered ℓ field on an otherwise-honest proof lands here.
+    const tamperedY = await verify(x, ((y + 1n) % N) as typeof y, t, proof);
+    expect(tamperedY.reason).toBe('identity-failed');
+  });
+
   it('rejects an out-of-range output', async () => {
     const t = asSteps(8);
     const { x, y } = evaluate(42n, t);
@@ -100,6 +118,46 @@ describe('Fiat–Shamir challenge binding', () => {
     // Miller–Rabin sanity: ℓ has no tiny factors and is odd
     expect(l1 % 2n).toBe(1n);
     for (const p of [3n, 5n, 7n, 11n, 13n]) expect(l1 % p === 0n).toBe(false);
+  });
+});
+
+describe('toy-scale bounds', () => {
+  it('the core API refuses difficulties beyond MAX_STEPS', () => {
+    // prove() materializes 2^T as a T-bit BigInt — fine at demo scale, not at real VDF
+    // difficulty. The bound makes "toy-scale" enforced rather than hoped for, and the UI
+    // slider maximum (2^14) sits far inside it.
+    expect(() => asSteps(MAX_STEPS)).not.toThrow();
+    expect(() => asSteps(MAX_STEPS + 1)).toThrow(/toy prover/);
+    expect(() => asSteps(2 ** 14)).not.toThrow();
+    expect(2 ** 14).toBeLessThanOrEqual(MAX_STEPS);
+  });
+});
+
+describe('prover cost is real, and stated', () => {
+  /**
+   * The page used to caption ℓ and π "Short proof (computed once by the evaluator)", which
+   * read as: the T squarings were the cost, the proof falls out. It does not — prove() runs a
+   * second square-and-multiply by ⌊2^T/ℓ⌋, roughly another T group operations. Measured here
+   * so the UI's stated number rests on the same engine.
+   */
+  it('prove() spends ~T more group operations at large T, and zero in the π = 1 regime', async () => {
+    // π = 1 regime: 2^T < ℓ (~2^127), so ⌊2^T/ℓ⌋ = 0 and groupPow does nothing.
+    for (const t of [16, 32, 64]) {
+      const T = asSteps(t);
+      const { x, y } = evaluate(42n, T);
+      resetOps();
+      const proof = await prove(x, y, T);
+      expect(ops(), `prove ops at T=${t}`).toBe(0);
+      expect(proof.pi).toBe(1n);
+    }
+    // Real regime: the quotient has ~T-128 bits, so the second exponentiation is ~linear in T.
+    const T = asSteps(2048);
+    const { x, y } = evaluate(42n, T);
+    resetOps();
+    await prove(x, y, T);
+    const proveOps = ops();
+    expect(proveOps, 'a second exponentiation, not a freebie').toBeGreaterThan(1500);
+    expect(proveOps, 'still ~linear in T, not worse').toBeLessThan(2 * 2048);
   });
 });
 

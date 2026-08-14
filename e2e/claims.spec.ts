@@ -78,6 +78,36 @@ test('an evaluation reports the same step count the difficulty control asked for
 });
 
 /**
+ * The proof caption states the prover cost its own run measured.
+ *
+ * The old caption — "Short proof (computed once by the evaluator)" — let the run read as
+ * squarings, free proof, cheap verify. prove() actually performs a second exponentiation of
+ * ~T group operations, except at low T where ⌊2^T/ℓ⌋ = 0 and π is the constant 1. Both
+ * regimes are driven and the printed sentence must carry the measured number, not a vibe.
+ */
+test('the proof caption states the measured prover cost, in both regimes', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto('.');
+
+  // π = 1 regime: 2^64 is below the 128-bit challenge, so generating π costs nothing.
+  await evaluateAt(page, 6);
+  const zeroCaption = page.locator('#prove-cost');
+  await expect(zeroCaption).toHaveAttribute('data-prove-ops', '0');
+  await expect(zeroCaption).toContainText('cost no group operations');
+  expect(await mono(page, 'pi'), 'the caption claims π = 1 and the rendered π must agree').toBe('1');
+
+  // Real regime: the caption must print the same count its data attribute carries, and that
+  // count must be real work on the same order as the evaluation itself.
+  const steps = await evaluateAt(page, 11);
+  const caption = page.locator('#prove-cost');
+  const proveOps = Number(await caption.getAttribute('data-prove-ops'));
+  expect(proveOps, 'the prover did real work').toBeGreaterThan(0);
+  expect(proveOps, 'a second exponentiation ~linear in T').toBeLessThan(2 * steps);
+  await expect(caption).toContainText(`${proveOps.toLocaleString()} more mod-N operations`);
+  await expect(caption).not.toContainText('computed once by the evaluator');
+});
+
+/**
  * The cost tiles, at every difficulty the slider can select.
  *
  * The previous version of this test ran the slider MAXIMUM only and asserted

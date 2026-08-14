@@ -4,6 +4,13 @@
 // a handful of group operations — NO loop of T squarings. This is the property a plain
 // time-lock puzzle lacks.
 //
+// HONESTY NOTE: the proof is tiny, but in this simple implementation GENERATING it is not.
+// prove() runs a second square-and-multiply exponentiation by ⌊2^T/ℓ⌋ — roughly another T
+// group operations on top of the evaluation — and it materializes 2^T as a T-bit BigInt
+// (bounded by MAX_STEPS in types.ts). Production Wesolowski provers stream the quotient and
+// generate π far more efficiently. Only VERIFICATION is cheap; the UI states the measured
+// prover cost rather than implying the proof falls out of the evaluation for free.
+//
 // Identity:  given y = x^(2^T) mod N and prime challenge ℓ = H(N,x,y,T),
 //            π = x^⌊2^T/ℓ⌋ mod N  and  r = 2^T mod ℓ,
 //            verification accepts iff  π^ℓ · x^r ≡ y  (mod N).
@@ -16,7 +23,12 @@ import type { GroupElement, Proof, Steps, VerifyResult } from './types';
 
 const enc = new TextEncoder();
 
-/** Miller–Rabin probable-prime test (deterministic enough for a ~128-bit demo challenge). */
+/**
+ * Miller–Rabin PROBABLE-prime test with the first twelve prime bases. Fixed small bases are
+ * proven deterministic only up to ~3.3e24 (~81 bits), so for a 128-bit candidate this is a
+ * probabilistic check, not a primality proof — ample for a demo challenge drawn from SHA-256
+ * output, but a production verifier would use a routine with a justified error bound.
+ */
 function isProbablePrime(n: bigint): boolean {
   if (n < 2n) return false;
   for (const p of [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n]) {
@@ -60,10 +72,14 @@ export async function hashToPrime(x: GroupElement, y: GroupElement, t: Steps): P
   throw new Error('hashToPrime exhausted counter (unreachable in practice)');
 }
 
-/** Generate the short proof. The prover may be expensive; it already did the T squarings. */
+/**
+ * Generate the short proof. This costs the prover a SECOND exponentiation of ~T group
+ * operations (see the honesty note above) — acceptable here because the prover is the slow
+ * party by design, but not "for free" and not how a production prover does it.
+ */
 export async function prove(x: GroupElement, y: GroupElement, t: Steps): Promise<Proof> {
   const l = await hashToPrime(x, y, t);
-  const exp2T = 1n << BigInt(t);     // prover-side big exponent — fine, prover is the slow party
+  const exp2T = 1n << BigInt(t);     // T-bit BigInt — toy-scale only; asSteps() bounds T
   const q = exp2T / l;               // ⌊2^T / ℓ⌋
   const pi = groupPow(x, q);
   return { l, pi };
@@ -89,6 +105,17 @@ export async function verify(x: GroupElement, y: GroupElement, t: Steps, proof: 
   const r = powmodSmall(2n, BigInt(t), l);       // cheap mod-ℓ pre-step (uncounted)
   const lhs = groupMul(groupPow(proof.pi, l), groupPow(x as GroupElement, r));
   const verifierOps = ops() - before;
-  const ok = lhs === yReduced;
-  return { ok, reason: ok ? 'verified' : 'identity-failed', verifierOps };
+  if (lhs !== yReduced) {
+    return { ok: false, reason: 'identity-failed', verifierOps };
+  }
+  // The proof object carries ℓ for display, and the identity above deliberately uses the
+  // DERIVED ℓ, never the transmitted one. But silently accepting a proof whose ℓ field
+  // disagrees with the transcript would mean an altered ℓ still verified, against the page's
+  // own fail-closed promise. Checked after the identity so a tampered x, y or T — which also
+  // shifts the derived challenge — still reports as the identity failure it is; only an
+  // altered ℓ field on an otherwise-honest proof lands here.
+  if (proof.l !== l) {
+    return { ok: false, reason: 'challenge-mismatch', verifierOps };
+  }
+  return { ok: true, reason: 'verified', verifierOps };
 }

@@ -9,18 +9,26 @@ yet whose result comes with a short proof anyone can check almost instantly. It 
 order — paired with the **Wesolowski short proof** (a Fiat–Shamir prime challenge derived
 with WebCrypto SHA-256). The security model is a public-coin, no-secret one: there is no
 shared key, and verification needs nothing private — its hardness rests on the assumption
-that the factorization of `N` (and hence the group's order) is unknown. The modulus here is a
-deliberately small 512-bit toy value so thousands of squarings run visibly in the browser; it
-is for teaching, not for protecting anything real.
+that the factorization of `N` (and hence the group's order) is unknown. In this demo that
+assumption is deliberately *not* met: `P` and `Q` ship in the public page bundle so the
+trapdoor exhibit can use them, and the honest evaluator and verifier are honest by
+construction — their code never reads the factors — not because the factors are secret. The
+modulus here is a deliberately small 512-bit toy value so thousands of squarings run visibly
+in the browser; it is for teaching, not for protecting anything real. The Wesolowski proof is
+tiny but not free to make: this simple prover performs a second exponentiation of roughly
+another `T` group operations to generate `π` (the page measures and prints that cost), where
+production provers generate it far more efficiently.
 
 ## When to Use It
 
-- **Decentralized randomness beacons** — a VDF imposes a delay no participant can shortcut,
-  so no one can grind or bias the output after seeing others' contributions.
-- **Blockchain leader election / consensus** — pick the next proposer from a value that could
-  not have been predicted or skewed in advance, with a proof every node verifies cheaply.
+- **Decentralized randomness beacons** — applied to input many parties generated together,
+  the delay blunts grinding and last-revealer advantage; unbiasability still needs the
+  surrounding commit-and-combine protocol.
+- **Blockchain leader election / consensus** — helps derive the next proposer from a seed no
+  participant could predict in time to bias, with a proof every node verifies cheaply — one
+  component inside a larger protocol of seed generation, eligibility rules and consensus.
 - **Fair lotteries and sealed-bid auctions** — commit first, then reveal a verifiably-delayed
-  outcome that nobody could have front-run.
+  outcome that was fixed before anyone could react to it.
 - **Anti front-running in decentralized systems** — enforce a mandatory, publicly-checkable
   delay before transactions are ordered or revealed.
 - **When NOT to use it:** to keep a secret or send a message into the future — that is a

@@ -12,16 +12,15 @@
  * `unverified: true` marks an absolutely-positioned pseudo-element. It can paint
  * outside its host and the oracle measures it against the host's backdrop, so
  * that ratio is NOT trustworthy — hand-measure before acting on it.
+ *
+ * EMPTY as of 2026-08-13: all seven control-boundary findings were the same
+ * under-applied pattern — the --border-strong boundary token stopped at
+ * `input[type="text"], input[type="number"]` and every button on the page was
+ * parked here instead. The token now covers the primary buttons (via
+ * --accent-text in the light theme), the secondary buttons, the copy buttons,
+ * and the shared header's .cl-btn controls (accent mix 38% -> 60%).
  */
 export const NONTEXT_BASELINE: Record<
   string,
   { ratio: number; required: number; unverified: boolean }
-> = {
-  "control-boundary|a.cl-btn": { ratio: 1.99, required: 3.0, unverified: false },
-  "control-boundary|button#cl-theme-toggle.cl-btn.cl-icon": { ratio: 1.99, required: 3.0, unverified: false },
-  "control-boundary|button#eval-btn": { ratio: 2.72, required: 3.0, unverified: false },
-  "control-boundary|button#verify-btn": { ratio: 2.72, required: 3.0, unverified: false },
-  "control-boundary|button#workers-btn.secondary": { ratio: 1.23, required: 3.0, unverified: false },
-  "control-boundary|button.copy-btn": { ratio: 1.19, required: 3.0, unverified: false },
-  "control-boundary|button.secondary": { ratio: 1.23, required: 3.0, unverified: false }
-};
+> = {};
