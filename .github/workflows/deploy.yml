@@ -36,7 +36,7 @@ jobs:
       # own arithmetic could deploy green — and one did.
       - name: Claims gate (the page's own numbers must back its own sentences)
         run: npm run test:claims
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
