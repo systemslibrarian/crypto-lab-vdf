@@ -46,6 +46,35 @@ async function evaluateAt(page: Page, exponent: number): Promise<number> {
   return 2 ** exponent;
 }
 
+/**
+ * Pause WebCrypto hashing on demand, so the window in which `verify()` awaits is a
+ * window a test can stand in rather than a race it has to win. Both regressions below
+ * use it: one changes the input while hashing, the other tampers.
+ */
+async function holdDigest(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const realDigest = crypto.subtle.digest.bind(crypto.subtle);
+    const control = window as unknown as {
+      __holdDigest: boolean;
+      __digestBlocked: boolean;
+      __releaseDigest?: () => void;
+    };
+    control.__holdDigest = false;
+    control.__digestBlocked = false;
+    Object.defineProperty(crypto.subtle, 'digest', {
+      configurable: true,
+      value: async (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+        if (control.__holdDigest) {
+          control.__digestBlocked = true;
+          await new Promise<void>((resolve) => { control.__releaseDigest = resolve; });
+          control.__holdDigest = false;
+        }
+        return realDigest(algorithm, data);
+      },
+    });
+  });
+}
+
 async function verifyOnce(page: Page): Promise<void> {
   await page.locator('#verify-btn').click();
   await expect(page.locator('#verify-result')).toContainText(/Verified|Rejected/u, { timeout: 60_000 });
@@ -472,28 +501,44 @@ test('regression: changing an input mid-evaluation retires the run that is still
   await expect(page.locator('#verify-result')).toContainText('Verified');
 });
 
-test('regression: changing an input while verification hashes cannot resurrect an old verdict', async ({ page }) => {
-  await page.addInitScript(() => {
-    const realDigest = crypto.subtle.digest.bind(crypto.subtle);
-    const control = window as unknown as {
-      __holdDigest: boolean;
-      __digestBlocked: boolean;
-      __releaseDigest?: () => void;
-    };
-    control.__holdDigest = false;
-    control.__digestBlocked = false;
-    Object.defineProperty(crypto.subtle, 'digest', {
-      configurable: true,
-      value: async (algorithm: AlgorithmIdentifier, data: BufferSource) => {
-        if (control.__holdDigest) {
-          control.__digestBlocked = true;
-          await new Promise<void>((resolve) => { control.__releaseDigest = resolve; });
-          control.__holdDigest = false;
-        }
-        return realDigest(algorithm, data);
-      },
+test('regression: tampering while verification hashes retires the verdict and leaves Verify usable',
+  async ({ page }) => {
+    await holdDigest(page);
+    await page.goto('.');
+    await evaluateAt(page, 6);
+
+    await page.evaluate(() => {
+      const control = window as unknown as { __holdDigest: boolean; __digestBlocked: boolean };
+      control.__holdDigest = true;
+      control.__digestBlocked = false;
     });
+    await page.locator('#verify-btn').click();
+    await page.waitForFunction(() =>
+      (window as unknown as { __digestBlocked: boolean }).__digestBlocked
+    );
+
+    await page.getByRole('button', { name: 'Tamper with y' }).click();
+    await expect(page.locator('#verify-result')).toContainText('Inputs changed');
+    await page.evaluate(() =>
+      (window as unknown as { __releaseDigest?: () => void }).__releaseDigest?.()
+    );
+    await page.waitForTimeout(500);
+
+    // The verdict that finished describes the UNtampered y and must not be shown. But the
+    // transcript is still on the table and the message says to press Verify, so the button
+    // has to be able to follow its own instruction.
+    await expect(page.locator('#verify-result')).toContainText('Inputs changed');
+    await expect(page.locator('#verify-result')).not.toContainText('Verified');
+    await expect(page.locator('#verify-btn')).toBeEnabled();
+
+    // And pressing it reaches the verdict the tampered transcript deserves.
+    await page.locator('#verify-btn').click();
+    await expect(page.locator('#verify-result')).toContainText(/Rejected/, { timeout: 30_000 });
+    await expect(page.locator('#verify-result')).toContainText('the output or proof was altered');
   });
+
+test('regression: changing an input while verification hashes cannot resurrect an old verdict', async ({ page }) => {
+  await holdDigest(page);
   await page.goto('.');
   await evaluateAt(page, 6);
 
