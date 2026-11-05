@@ -496,8 +496,15 @@ function verifyPanel(): HTMLElement {
       const res = await verify(r.x, shownY, r.t, proof);
       // WebCrypto yields while deriving the challenge. An input edit, tamper, reset, or new
       // evaluation during that window already rendered the correct stale state; do not let
-      // this old transcript overwrite it with a verdict or re-enable Verify.
-      if (revision !== state.revision) return;
+      // this old transcript overwrite it with a verdict.
+      if (revision !== state.revision) {
+        // But leave Verify usable where the retirement message says to press it. Tamper and
+        // Reset retire the verdict and KEEP the transcript, so "press Verify to re-check" is
+        // an instruction the button has to be able to follow; an input edit clears the
+        // result, and then it correctly stays disabled.
+        if (state.result && state.proof) verifyBtn.removeAttribute('disabled');
+        return;
+      }
       renderVerify(result, res.ok, res.reason, r.t, res.verifierOps);
       verifyBtn.removeAttribute('disabled');
     })();
