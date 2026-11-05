@@ -72,8 +72,17 @@ interface State {
   proveOps: number;             // mod-N operations prove() spent generating π for this run
   shownY: GroupElement | null;  // what the verifier is handed (may be tampered)
   shownPi: GroupElement | null; // proof element handed to the verifier (may be tampered)
+  /** Changes whenever the transcript or the inputs behind it change. */
+  revision: number;
 }
-const state: State = { result: null, proof: null, proveOps: 0, shownY: null, shownPi: null };
+const state: State = {
+  result: null,
+  proof: null,
+  proveOps: 0,
+  shownY: null,
+  shownPi: null,
+  revision: 0,
+};
 
 /**
  * The caption over ℓ and π. It used to read "Short proof (computed once by the evaluator)",
@@ -225,6 +234,9 @@ function evaluatePanel(): HTMLElement {
     const wasRunning = running;
     runId++;        // any in-flight tick or awaited prove() now belongs to a superseded run
     running = false;
+    // verify() also awaits WebCrypto. Its verdict belongs to the exact transcript captured
+    // when Verify was pressed, so an input edit must retire that in-flight work too.
+    state.revision++;
     if (!state.result && !state.proof && !wasRunning) return;
     evalBtn.removeAttribute('disabled');
     state.result = null;
@@ -288,6 +300,8 @@ function evaluatePanel(): HTMLElement {
     const t = asSteps(2 ** Number(tExp.value));
     const myRun = ++runId;
     running = true;
+    // Re-running the evaluator retires any verification still hashing the previous transcript.
+    state.revision++;
     evalBtn.setAttribute('disabled', '');
     document.getElementById('verify-btn')?.setAttribute('disabled', '');
     output.replaceChildren();
@@ -465,10 +479,10 @@ function verifyPanel(): HTMLElement {
     );
   };
 
-  tamperY.addEventListener('click', () => { if (state.shownY !== null) { state.shownY = flipLowBit(state.shownY); refreshOutput(); markStale(result); } });
-  tamperPi.addEventListener('click', () => { if (state.shownPi !== null) { state.shownPi = flipLowBit(state.shownPi); refreshOutput(); markStale(result); } });
+  tamperY.addEventListener('click', () => { if (state.shownY !== null) { state.revision++; state.shownY = flipLowBit(state.shownY); refreshOutput(); markStale(result); } });
+  tamperPi.addEventListener('click', () => { if (state.shownPi !== null) { state.revision++; state.shownPi = flipLowBit(state.shownPi); refreshOutput(); markStale(result); } });
   reset.addEventListener('click', () => {
-    if (state.result && state.proof) { state.shownY = state.result.y; state.shownPi = state.proof.pi; refreshOutput(); markStale(result); }
+    if (state.result && state.proof) { state.revision++; state.shownY = state.result.y; state.shownPi = state.proof.pi; refreshOutput(); markStale(result); }
   });
 
   verifyBtn.addEventListener('click', () => {
@@ -476,7 +490,14 @@ function verifyPanel(): HTMLElement {
     verifyBtn.setAttribute('disabled', '');
     void (async () => {
       const r = state.result!;
-      const res = await verify(r.x, state.shownY!, r.t, { l: state.proof!.l, pi: state.shownPi! });
+      const shownY = state.shownY!;
+      const proof = { l: state.proof!.l, pi: state.shownPi! };
+      const revision = state.revision;
+      const res = await verify(r.x, shownY, r.t, proof);
+      // WebCrypto yields while deriving the challenge. An input edit, tamper, reset, or new
+      // evaluation during that window already rendered the correct stale state; do not let
+      // this old transcript overwrite it with a verdict or re-enable Verify.
+      if (revision !== state.revision) return;
       renderVerify(result, res.ok, res.reason, r.t, res.verifierOps);
       verifyBtn.removeAttribute('disabled');
     })();

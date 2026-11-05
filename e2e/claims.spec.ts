@@ -472,6 +472,56 @@ test('regression: changing an input mid-evaluation retires the run that is still
   await expect(page.locator('#verify-result')).toContainText('Verified');
 });
 
+test('regression: changing an input while verification hashes cannot resurrect an old verdict', async ({ page }) => {
+  await page.addInitScript(() => {
+    const realDigest = crypto.subtle.digest.bind(crypto.subtle);
+    const control = window as unknown as {
+      __holdDigest: boolean;
+      __digestBlocked: boolean;
+      __releaseDigest?: () => void;
+    };
+    control.__holdDigest = false;
+    control.__digestBlocked = false;
+    Object.defineProperty(crypto.subtle, 'digest', {
+      configurable: true,
+      value: async (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+        if (control.__holdDigest) {
+          control.__digestBlocked = true;
+          await new Promise<void>((resolve) => { control.__releaseDigest = resolve; });
+          control.__holdDigest = false;
+        }
+        return realDigest(algorithm, data);
+      },
+    });
+  });
+  await page.goto('.');
+  await evaluateAt(page, 6);
+
+  await page.evaluate(() => {
+    const control = window as unknown as { __holdDigest: boolean; __digestBlocked: boolean };
+    control.__holdDigest = true;
+    control.__digestBlocked = false;
+  });
+  await page.locator('#verify-btn').click();
+  await page.waitForFunction(() =>
+    (window as unknown as { __digestBlocked: boolean }).__digestBlocked
+  );
+
+  await page.fill('#vdf-input', '43');
+  await expect(page.locator('#verify-result')).toContainText('Input changed');
+  await page.evaluate(() =>
+    (window as unknown as { __releaseDigest?: () => void }).__releaseDigest?.()
+  );
+
+  // The completed verification describes x=42. It must not overwrite the stale state beside
+  // the now-visible x=43 or re-enable a button that has no current result to verify.
+  await page.waitForTimeout(500);
+  await expect(page.locator('#verify-result')).toContainText('Input changed');
+  await expect(page.locator('#verify-result')).not.toContainText('Verified');
+  await expect(page.locator('#verify-btn')).toBeDisabled();
+  await expect(page.locator('#eval-output')).toBeEmpty();
+});
+
 test('regression: non-numeric input is refused with a visible, announced error', async ({ page }) => {
   await page.goto('.');
   const error = page.locator('#vdf-input-err');
