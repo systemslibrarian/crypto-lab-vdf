@@ -17,7 +17,11 @@ modulus here is a deliberately small 512-bit toy value so thousands of squarings
 in the browser; it is for teaching, not for protecting anything real. The Wesolowski proof is
 tiny but not free to make: this simple prover performs a second exponentiation of roughly
 another `T` group operations to generate `π` (the page measures and prints that cost), where
-production provers generate it far more efficiently.
+production provers generate it far more efficiently. The challenge prime ℓ is 128 bits,
+which is also a teaching size: with a λ-bit challenge prime a malicious prover can forge the
+non-interactive proof with about 2^(λ/2) work, so 128 bits gives about 2^64 soundness and a
+deployment needs a prime of about 256 bits ("A Survey of Two Verifiable Delay Functions Using
+Proof of Exponentiation", 2024, §3.2). The page says so beside the construction.
 
 ## When to Use It
 

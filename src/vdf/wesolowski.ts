@@ -56,17 +56,37 @@ async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 /**
- * Fiat–Shamir challenge: a ~128-bit prime ℓ bound to ALL of (N, x, y, T). Changing any of
- * them changes ℓ, so a swapped output cannot reuse an old proof.
+ * Width of the Fiat–Shamir challenge prime ℓ, in bits.
+ *
+ * 128 bits is a TEACHING size, and it buys about 2^64 soundness, not 2^128. "A Survey of
+ * Two Verifiable Delay Functions Using Proof of Exponentiation" (2024), §3.2: when the
+ * hash outputs a λ-bit challenge prime "there is a practical Õ(2^(λ/2)) time attack on
+ * Wesolowski's non-interactive argument", and "taking λ = 128 results in an insecure
+ * argument that can be defeated by a malicious prover with about 2^64 work"; "for 128-bit
+ * security, the hash function must output a 256-bit prime ℓ". (The attack is a birthday
+ * search: fix 2^(λ/2) primes in advance and re-hash until the challenge lands on one.)
+ *
+ * That is fine for a toy whose 512-bit modulus ships with its own factors, and it is not
+ * a size to deploy. The sibling lab crypto-lab-vrf-gate hashes to ~256 bits. The page
+ * prints the consequence beside the Wesolowski construction, derived from this constant.
+ */
+export const CHALLENGE_BITS = 128;
+
+/** log2 of the forging work the challenge width leaves a malicious prover: λ/2. */
+export const SOUNDNESS_BITS = CHALLENGE_BITS / 2;
+
+/**
+ * Fiat–Shamir challenge: a CHALLENGE_BITS-bit prime ℓ bound to ALL of (N, x, y, T).
+ * Changing any of them changes ℓ, so a swapped output cannot reuse an old proof.
  */
 export async function hashToPrime(x: GroupElement, y: GroupElement, t: Steps): Promise<bigint> {
   const base = `${N}|${x}|${y}|${t}|`;
   for (let counter = 0; counter < 1 << 20; counter++) {
     const digest = await sha256(enc.encode(base + counter));
     let cand = 0n;
-    for (let i = 0; i < 16; i++) cand = (cand << 8n) | BigInt(digest[i]!); // 128 bits
-    cand |= 1n;                 // odd
-    cand |= 1n << 127n;         // full width
+    for (let i = 0; i < CHALLENGE_BITS / 8; i++) cand = (cand << 8n) | BigInt(digest[i]!);
+    cand |= 1n;                                // odd
+    cand |= 1n << BigInt(CHALLENGE_BITS - 1);  // full width
     if (isProbablePrime(cand)) return cand;
   }
   throw new Error('hashToPrime exhausted counter (unreachable in practice)');

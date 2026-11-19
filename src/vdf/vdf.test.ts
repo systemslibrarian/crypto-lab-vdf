@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { LAMBDA, N, ops, powmodSmall, resetOps, toElement } from './group';
 import { evaluate } from './eval';
-import { hashToPrime, prove, verify } from './wesolowski';
+import { CHALLENGE_BITS, SOUNDNESS_BITS, hashToPrime, prove, verify } from './wesolowski';
 import { cheatWithFactors } from './trapdoor';
 import { raceWorkers, sliceSteps } from './parallel';
 import { MAX_STEPS, asSteps } from './types';
@@ -118,6 +118,27 @@ describe('Fiat–Shamir challenge binding', () => {
     // Miller–Rabin sanity: ℓ has no tiny factors and is odd
     expect(l1 % 2n).toBe(1n);
     for (const p of [3n, 5n, 7n, 11n, 13n]) expect(l1 % p === 0n).toBe(false);
+  });
+});
+
+describe('challenge width, and what it buys', () => {
+  /**
+   * "A Survey of Two Verifiable Delay Functions Using Proof of Exponentiation" (2024),
+   * §3.2: a λ-bit challenge prime leaves a malicious prover about 2^(λ/2) work, so the
+   * constant the page prints must be the width hashToPrime really produces, and the
+   * soundness figure must be half of it -- never the width itself.
+   */
+  it('every challenge is exactly CHALLENGE_BITS wide, and soundness is half that', async () => {
+    const x = toElement(42n);
+    for (const steps of [16, 64, 200]) {
+      const { y } = evaluate(42n, asSteps(steps));
+      const l = await hashToPrime(x, y, asSteps(steps));
+      expect(l.toString(2).length).toBe(CHALLENGE_BITS);
+    }
+    expect(SOUNDNESS_BITS).toBe(CHALLENGE_BITS / 2);
+    // 128-bit security needs ~256 bits; this toy is below that and must say so, not hide it.
+    expect(CHALLENGE_BITS).toBeLessThan(256);
+    expect(SOUNDNESS_BITS).toBe(64);
   });
 });
 

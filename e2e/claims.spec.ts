@@ -137,6 +137,32 @@ test('the proof caption states the measured prover cost, in both regimes', async
 });
 
 /**
+ * The challenge prime's width, and the soundness it buys.
+ *
+ * The lab hashes to a 128-bit prime. "A Survey of Two Verifiable Delay Functions Using Proof
+ * of Exponentiation" (2024), §3.2: with a λ-bit challenge prime a malicious prover forges
+ * with about 2^(λ/2) work -- "about 2^64 work" at λ = 128 -- and 128-bit security needs a
+ * 256-bit prime. The page must say that, and the width it names is checked against the ℓ it
+ * actually renders, measured here from the printed digits rather than read from the source.
+ */
+test('the page states the soundness a challenge of the rendered width gives', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto('.');
+  await evaluateAt(page, 11);
+  const bits = BigInt(await mono(page, 'l')).toString(2).length;
+
+  const note = await page.locator('#challenge-size-note').innerText();
+  expect(note).toContain(`${bits}-bit prime`);
+  expect(note).toContain(`about 2^${bits / 2} soundness, not 2^${bits}`);
+  expect(note).toContain(`about ${2 * bits} bits`);
+  expect(note).toContain('A Survey of Two Verifiable Delay Functions Using Proof of Exponentiation');
+  expect(note).toMatch(/not a size to deploy/);
+  // Nowhere may the page equate the challenge width with the security level.
+  const body = await page.locator('body').innerText();
+  expect(body).not.toMatch(new RegExp(`${bits}-bit (security|soundness)(?! the prime)`));
+});
+
+/**
  * The cost tiles, at every difficulty the slider can select.
  *
  * The previous version of this test ran the slider MAXIMUM only and asserted

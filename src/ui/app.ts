@@ -4,7 +4,7 @@
 import { N, ops, resetOps } from '../vdf/group';
 import { evaluateSteps, type EvalResult } from '../vdf/eval';
 import { raceWorkers } from '../vdf/parallel';
-import { prove, verify } from '../vdf/wesolowski';
+import { prove, verify, CHALLENGE_BITS, SOUNDNESS_BITS } from '../vdf/wesolowski';
 import { cheatWithFactors } from '../vdf/trapdoor';
 import { asSteps, type GroupElement, type Proof } from '../vdf/types';
 
@@ -646,6 +646,10 @@ function constructionsPanel(): HTMLElement {
   p.append(el('ul', { class: 'constructions' }, [
     li('Repeated squaring', 'y = x^(2^T) mod N in a group of unknown order. The unknown order is what makes the T squarings unavoidable — this demo’s engine.'),
     li('Wesolowski proof', 'A single short group element π plus a prime challenge. Tiny proof, very fast verification — what this demo checks.'),
+    el('li', { id: 'challenge-size-note' }, [
+      strong('How big the challenge has to be — '),
+      `this demo hashes to a ${CHALLENGE_BITS}-bit prime ℓ, which is a teaching size. A ${CHALLENGE_BITS}-bit ℓ gives the non-interactive proof about 2^${SOUNDNESS_BITS} soundness, not 2^${CHALLENGE_BITS}: a cheating prover can fix 2^${SOUNDNESS_BITS} primes in advance and re-hash until the challenge lands on one of them (“A Survey of Two Verifiable Delay Functions Using Proof of Exponentiation”, 2024, §3.2). For ${CHALLENGE_BITS}-bit security the prime must be about ${2 * CHALLENGE_BITS} bits. Fine for a toy; not a size to deploy.`,
+    ]),
     li('Pietrzak proof', 'A recursive halving argument: ~log T group elements, no prime sampling, statistically sound. A natural alternative prover.'),
     li('RSA group vs class group', 'An RSA modulus needs a trusted setup so nobody knows the factors; an imaginary-quadratic class group needs no setup at all.'),
   ]));
