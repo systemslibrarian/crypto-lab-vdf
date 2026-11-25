@@ -4,7 +4,7 @@
 import { N, ops, resetOps } from '../vdf/group';
 import { evaluateSteps, type EvalResult } from '../vdf/eval';
 import { raceWorkers } from '../vdf/parallel';
-import { prove, verify, CHALLENGE_BITS, SOUNDNESS_BITS } from '../vdf/wesolowski';
+import { proveWithCost, verify, CHALLENGE_BITS, SOUNDNESS_BITS } from '../vdf/wesolowski';
 import { cheatWithFactors } from '../vdf/trapdoor';
 import { asSteps, type GroupElement, type Proof } from '../vdf/types';
 
@@ -50,15 +50,26 @@ function monoBox(label: string, value: bigint, tampered = false, key = ''): HTML
     box.style.borderColor = 'var(--alarm)';
     box.append(el('span', { class: 'label', style: 'color:var(--alarm-text);margin-left:.6rem' }, ['(tampered)']));
   }
+  let resetLabel: ReturnType<typeof setTimeout> | undefined;
+  let copyAttempt = 0;
   box.append(
     el('button', {
       class: 'copy-btn',
       type: 'button',
       'aria-label': `Copy ${label}`,
-      onclick: (e: Event) => {
-        navigator.clipboard?.writeText(text);
-        (e.currentTarget as HTMLButtonElement).textContent = 'copied';
-        setTimeout(() => ((e.currentTarget as HTMLButtonElement).textContent = 'copy'), 1000);
+      onclick: async (e: Event) => {
+        const button = e.currentTarget as HTMLButtonElement;
+        const attempt = ++copyAttempt;
+        clearTimeout(resetLabel);
+        try {
+          await navigator.clipboard.writeText(text);
+          if (attempt !== copyAttempt) return;
+          button.textContent = 'copied';
+        } catch {
+          if (attempt !== copyAttempt) return;
+          button.textContent = 'copy failed';
+        }
+        resetLabel = setTimeout(() => { button.textContent = 'copy'; }, 1000);
       },
     }, ['copy']),
   );
@@ -285,7 +296,9 @@ function evaluatePanel(): HTMLElement {
   evalBtn.addEventListener('click', () => {
     let inputBig: bigint;
     try {
-      inputBig = BigInt((input.value || '0').trim());
+      const raw = input.value.trim();
+      if (!raw) throw new Error('Missing input');
+      inputBig = BigInt(raw);
       input.removeAttribute('aria-invalid');
       inputErr.hidden = true;
       inputErr.textContent = '';
@@ -362,9 +375,7 @@ async function finalizeEval(
     monoBox('y =', res.y, false, 'y'),
     el('p', { class: 'counter' }, ['Generating the short proof…']),
   );
-  const opsBefore = ops();
-  const proof = await prove(res.x, res.y, res.t);
-  const proveOps = ops() - opsBefore;
+  const { proof, operations: proveOps } = await proveWithCost(res.x, res.y, res.t);
   // prove() awaits: an input may have changed while it ran, and retireResult has already
   // cleared state. Writing the proof here would resurrect the retired run.
   if (!isCurrent()) return;

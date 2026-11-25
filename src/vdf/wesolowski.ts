@@ -98,11 +98,17 @@ export async function hashToPrime(x: GroupElement, y: GroupElement, t: Steps): P
  * party by design, but not "for free" and not how a production prover does it.
  */
 export async function prove(x: GroupElement, y: GroupElement, t: Steps): Promise<Proof> {
+  return (await proveWithCost(x, y, t)).proof;
+}
+
+/** Count only proof-generation operations, after the asynchronous challenge is ready. */
+export async function proveWithCost(x: GroupElement, y: GroupElement, t: Steps): Promise<{ proof: Proof; operations: number }> {
   const l = await hashToPrime(x, y, t);
   const exp2T = 1n << BigInt(t);     // T-bit BigInt — toy-scale only; asSteps() bounds T
   const q = exp2T / l;               // ⌊2^T / ℓ⌋
+  const before = ops();
   const pi = groupPow(x, q);
-  return { l, pi };
+  return { proof: { l, pi }, operations: ops() - before };
 }
 
 /**
@@ -120,9 +126,9 @@ export async function verify(x: GroupElement, y: GroupElement, t: Steps, proof: 
   if (proof.pi <= 0n || proof.pi >= N) {
     return { ok: false, reason: 'bad-input', verifierOps: 0 };
   }
-  const before = ops();
   const l = await hashToPrime(x, y, t);          // re-derive challenge from the claimed values
   const r = powmodSmall(2n, BigInt(t), l);       // cheap mod-ℓ pre-step (uncounted)
+  const before = ops();
   const lhs = groupMul(groupPow(proof.pi, l), groupPow(x as GroupElement, r));
   const verifierOps = ops() - before;
   if (lhs !== yReduced) {

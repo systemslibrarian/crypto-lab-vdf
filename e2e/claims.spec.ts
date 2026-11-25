@@ -634,3 +634,49 @@ test('regression: no element carrying the hidden attribute is still rendered', a
   );
   expect(leaks, `elements marked hidden that still render: ${JSON.stringify(leaks)}`).toEqual([]);
 });
+
+test('the independent worker simulation never adds to the proof or verification counters', async ({ page }) => {
+  await holdDigest(page);
+  await page.goto('.');
+  await evaluateAt(page, 8);
+  const prover = await page.locator('#prove-cost').getAttribute('data-prove-ops');
+  await verifyOnce(page);
+  const verifier = await page.locator('.verifyc .big').innerText();
+
+  for (const action of ['#eval-btn', '#verify-btn']) {
+    await page.evaluate(() => { Object.assign(window, { __holdDigest: true, __digestBlocked: false }); });
+    await page.locator(action).click();
+    await page.waitForFunction(() => Reflect.get(window, '__digestBlocked'));
+    await page.locator('#workers-btn').click();
+    await expect(page.locator('#workers-chained')).toContainText('the same y');
+    await page.evaluate(() => Reflect.get(window, '__releaseDigest')());
+    await expect(page.locator(action)).toBeEnabled();
+  }
+  await expect(page.locator('#prove-cost')).toHaveAttribute('data-prove-ops', prover!);
+  await expect(page.locator('.verifyc .big')).toHaveText(verifier);
+});
+
+test('blank input has no result and the copy button reports the clipboard outcome', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: {
+      writeText: async (text: string) => {
+        if (text !== '42') throw new Error('Clipboard denied');
+      },
+    } });
+  });
+  await page.goto('.');
+  await evaluateAt(page, 4);
+  for (const [field, outcome] of [['x', 'copied'], ['y', 'copy failed']]) {
+    const button = page.locator(`[data-mono="${field}"] button`).first();
+    await button.click();
+    await expect(button).toHaveText(outcome);
+    await expect(button).toHaveText('copy');
+  }
+  for (const value of ['', '   ']) {
+    await page.locator('#vdf-input').fill(value);
+    await page.locator('#eval-btn').click();
+    await expect(page.locator('#vdf-input-err')).toBeVisible();
+    await expect(page.locator('#verify-btn')).toBeDisabled();
+    await expect(page.locator('#eval-output')).toBeEmpty();
+  }
+});
